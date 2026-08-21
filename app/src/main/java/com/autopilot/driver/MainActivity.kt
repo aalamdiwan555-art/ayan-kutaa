@@ -3,7 +3,7 @@ package com.autopilot.driver
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
-import android.view.accessibility.AccessibilityManager
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -18,6 +18,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        AdManager.showInterstitial(this)
 
         if (!AppPrefs.isLoggedIn) {
             startActivity(Intent(this, LoginActivity::class.java))
@@ -51,6 +52,27 @@ class MainActivity : AppCompatActivity() {
         }
 
         updateSubscriptionUI()
+        updateRewardsUI()
+        binding.btnAdmin.visibility = if (AppPrefs.isAuthorizedAdmin()) View.VISIBLE else View.GONE
+
+        binding.btnClaimReward.setOnClickListener {
+            if (AppPrefs.claimDailyReward()) {
+                Toast.makeText(this, "Daily reward claimed: +25 points", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Daily reward already claimed", Toast.LENGTH_SHORT).show()
+            }
+            updateRewardsUI()
+        }
+
+        binding.btnRedeemReward.setOnClickListener {
+            if (AppPrefs.redeemRewardForSubscription()) {
+                Toast.makeText(this, "Reward redeemed: 1 subscription day added", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "You need 100 points to redeem", Toast.LENGTH_SHORT).show()
+            }
+            updateSubscriptionUI()
+            updateRewardsUI()
+        }
 
         binding.btnAdmin.setOnClickListener {
             startActivity(Intent(this, AdminActivity::class.java))
@@ -69,6 +91,8 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updateBotUI()
         updateSubscriptionUI()
+        updateRewardsUI()
+        binding.btnAdmin.visibility = if (AppPrefs.isAuthorizedAdmin()) View.VISIBLE else View.GONE
     }
 
     private fun startBot() {
@@ -111,6 +135,11 @@ class MainActivity : AppCompatActivity() {
         binding.tvSubscription.setTextColor(
             ContextCompat.getColor(this, if (hasSub) android.R.color.holo_green_dark else android.R.color.holo_red_dark)
         )
+    }
+
+    private fun updateRewardsUI() {
+        binding.tvRewards.text = "Rewards: ${AppPrefs.rewardPoints} points"
+        binding.btnRedeemReward.isEnabled = AppPrefs.rewardPoints >= 100
     }
 
     private fun isAccessibilityEnabled(): Boolean {
