@@ -36,11 +36,11 @@ object OcrKeywords {
     )
 
     val PRICE_PATTERNS = listOf(
-        Regex("[₹Rs.\s]*([0-9,]+(?:\.[0-9]{1,2})?)"),
-        Regex("([0-9,]+)\s*₹"),
-        Regex("fare\s*:?\s*([0-9,]+)", RegexOption.IGNORE_CASE),
-        Regex("price\s*:?\s*([0-9,]+)", RegexOption.IGNORE_CASE),
-        Regex("amount\s*:?\s*([0-9,]+)", RegexOption.IGNORE_CASE),
-        Regex("\₹\s*([0-9,]+)")
+        Regex("""[₹Rs.\s]*([0-9,]+(?:\.[0-9]{1,2})?)"""),
+        Regex("""([0-9,]+)\s*₹"""),
+        Regex("""fare\s*:?\s*([0-9,]+)""", RegexOption.IGNORE_CASE),
+        Regex("""price\s*:?\s*([0-9,]+)""", RegexOption.IGNORE_CASE),
+        Regex("""amount\s*:?\s*([0-9,]+)""", RegexOption.IGNORE_CASE),
+        Regex("""₹\s*([0-9,]+)""")
     )
 }
