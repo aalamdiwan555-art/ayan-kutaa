@@ -49,6 +49,21 @@ object AppPrefs {
             prefs.edit().putString("user_email", value).commit()
         }
 
+    var isAdmin: Boolean
+        get() = prefs.getBoolean("is_admin", false)
+        set(value) {
+            prefs.edit().putBoolean("is_admin", value).apply()
+        }
+
+    fun setLoginSession(token: String, email: String, admin: Boolean) {
+        prefs.edit()
+            .putBoolean("is_logged_in", true)
+            .putString("auth_token", token)
+            .putString("user_email", email)
+            .putBoolean("is_admin", admin)
+            .commit()
+    }
+
     var isOnboardingComplete: Boolean
         get() = prefs.getBoolean("onboarding_complete", false)
         set(value) {
@@ -100,7 +115,7 @@ object AppPrefs {
     fun isAuthorizedAdmin(): Boolean {
         // The admin claim must come from a trusted authentication response.
         // Never grant admin access based on a client-editable email address.
-        return isLoggedIn && prefs.getBoolean("is_admin", false)
+        return isLoggedIn && isAdmin
     }
 
     fun addRewardPoints(points: Int) {

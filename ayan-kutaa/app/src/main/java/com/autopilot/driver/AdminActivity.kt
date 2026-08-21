@@ -4,7 +4,9 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.autopilot.driver.databinding.ActivityAdminBinding
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 
@@ -15,10 +17,31 @@ class AdminActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityAdminBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        if (!AppPrefs.isAuthorizedAdmin()) {
+        if (!AppPrefs.isLoggedIn || AppPrefs.authToken.isNullOrBlank()) {
             Toast.makeText(this, "Admin access denied", Toast.LENGTH_SHORT).show()
             finish()
             return
+        }
+        val api = ApiClient.authApi()
+        if (api == null) {
+            Toast.makeText(this, "Admin service is unavailable.", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                val response = api.verifyAdmin("Bearer ${AppPrefs.authToken}")
+                if (!response.isSuccessful || response.body()?.isAdmin != true) {
+                    AppPrefs.isAdmin = false
+                    Toast.makeText(this@AdminActivity, "Admin access denied", Toast.LENGTH_SHORT).show()
+                    finish()
+                } else {
+                    AppPrefs.isAdmin = true
+                }
+            } catch (_: Exception) {
+                Toast.makeText(this@AdminActivity, "Unable to verify admin access.", Toast.LENGTH_LONG).show()
+                finish()
+            }
         }
 
         binding.btnAddSubscription.setOnClickListener {
@@ -50,11 +73,4 @@ class AdminActivity : AppCompatActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (!AppPrefs.isAuthorizedAdmin()) {
-            Toast.makeText(this, "Admin access revoked", Toast.LENGTH_SHORT).show()
-            finish()
-        }
-    }
 }

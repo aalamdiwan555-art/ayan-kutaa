@@ -15,6 +15,11 @@ android {
         versionName = "1.0"
         // Keep the advertising identifier in build configuration, not application code.
         buildConfigField("String", "STARTAPP_ID", "\"207133232\"")
+        buildConfigField(
+            "String",
+            "API_BASE_URL",
+            "\"${System.getenv("API_BASE_URL").orEmpty().replace("\"", "\\\"")}\""
+        )
     }
 
     buildTypes {

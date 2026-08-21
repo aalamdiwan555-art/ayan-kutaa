@@ -4,7 +4,9 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.autopilot.driver.databinding.ActivityLoginBinding
+import kotlinx.coroutines.launch
 
 class LoginActivity : AppCompatActivity() {
     private lateinit var binding: ActivityLoginBinding
@@ -31,7 +33,30 @@ class LoginActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            Toast.makeText(this, "Authentication service is not configured yet.", Toast.LENGTH_LONG).show()
+            val api = ApiClient.authApi()
+            if (api == null) {
+                Toast.makeText(this, "Authentication service is unavailable.", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            binding.btnLogin.isEnabled = false
+            lifecycleScope.launch {
+                try {
+                    val response = api.login(LoginRequest(email, password))
+                    val body = response.body()
+                    val responseEmail = body?.email
+                    if (response.isSuccessful && body?.token?.isNotBlank() == true && !responseEmail.isNullOrBlank()) {
+                        AppPrefs.setLoginSession(body.token, responseEmail, body.isAdmin)
+                        startActivity(Intent(this@LoginActivity, MainActivity::class.java))
+                        finish()
+                    } else {
+                        Toast.makeText(this@LoginActivity, "Invalid email or password.", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (_: Exception) {
+                    Toast.makeText(this@LoginActivity, "Unable to reach the authentication service.", Toast.LENGTH_LONG).show()
+                } finally {
+                    binding.btnLogin.isEnabled = true
+                }
+            }
         }
 
         binding.tvSignup.setOnClickListener {

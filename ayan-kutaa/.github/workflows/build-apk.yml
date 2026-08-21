@@ -9,6 +9,7 @@ permissions:
   contents: read
 
 env:
+  API_BASE_URL: ${{ secrets.API_BASE_URL }}
 jobs:
   build:
     runs-on: ubuntu-latest
