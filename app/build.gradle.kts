@@ -25,13 +25,16 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            isMinifyEnabled = false  // debug ke liye add kar diya
+        }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17  // <-- 1_8 se 17 kiya
+        targetCompatibility = JavaVersion.VERSION_17  // <-- 1_8 se 17 kiya
     }
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"  // <-- 1.8 se 17 kiya
     }
     buildFeatures {
         viewBinding = true
