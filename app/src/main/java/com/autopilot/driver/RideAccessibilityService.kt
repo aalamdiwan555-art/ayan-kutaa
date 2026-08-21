@@ -6,12 +6,14 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
 import kotlinx.coroutines.*
+import java.util.concurrent.atomic.AtomicLong
 
 class RideAccessibilityService : AccessibilityService() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val acceptKeywords = OcrKeywords.ACCEPT_KEYWORDS
     private val pricePatterns = OcrKeywords.PRICE_PATTERNS
+    private val lastClickAt = AtomicLong(0L)
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -28,6 +30,7 @@ class RideAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (!BotState.isRunning || !AppPrefs.isLoggedIn || !AppPrefs.hasActiveSubscription()) return
+        if (System.currentTimeMillis() - lastClickAt.get() < 750L) return
 
         val rootNode = rootInActiveWindow ?: return
         serviceScope.launch(Dispatchers.Default) {
@@ -56,12 +59,17 @@ class RideAccessibilityService : AccessibilityService() {
 
         for (btn in acceptButtons) {
             serviceScope.launch(Dispatchers.Main) {
-                btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                Toast.makeText(
-                    this@RideAccessibilityService,
-                    "Ride accepted! ₹$price",
-                    Toast.LENGTH_SHORT
-                ).show()
+                if (lastClickAt.compareAndSet(lastClickAt.get(), System.currentTimeMillis())) {
+                    val clicked = btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    if (clicked) {
+                        AppPrefs.addRewardPoints(10)
+                        Toast.makeText(
+                            this@RideAccessibilityService,
+                            "Ride accepted! ₹$price (+10 points)",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
             }
             btn.recycle()
         }
