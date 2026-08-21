@@ -1,3 +1,0 @@
--keep class com.autopilot.driver.** { *; }
--keepclassmembers class * extends android.accessibilityservice.AccessibilityService { *; }
--keepclassmembers class * extends android.app.Application { *; }
