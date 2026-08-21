@@ -1,1 +1,2 @@
-- [GitHub push authentication](github-push-auth.md) — Git smart HTTP needs Basic token auth even when API bearer auth works.
+- [Android build environment](android-build-environment.md) — Android builds require an installed SDK; Gradle alone is not enough in this workspace.
+- [GitHub push authentication](github-push-auth.md) — HTTPS pushes work with the configured token as x-access-token basic auth; bearer headers may be rejected.
