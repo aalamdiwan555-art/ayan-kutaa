@@ -5,6 +5,10 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import android.util.Log
+import android.util.Base64
+import java.security.SecureRandom
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToLong
 
@@ -47,6 +51,18 @@ object AppPrefs {
         get() = prefs.getString("user_email", null)
         set(value) {
             prefs.edit().putString("user_email", value).commit()
+        }
+
+    var userName: String?
+        get() = prefs.getString("user_name", null)
+        set(value) {
+            prefs.edit().putString("user_name", value).apply()
+        }
+
+    var userPhone: String?
+        get() = prefs.getString("user_phone", null)
+        set(value) {
+            prefs.edit().putString("user_phone", value).apply()
         }
 
     var isOnboardingComplete: Boolean
@@ -103,6 +119,49 @@ object AppPrefs {
         return isLoggedIn && prefs.getBoolean("is_admin", false)
     }
 
+    fun registerUser(name: String, email: String, phone: String, password: String): Boolean {
+        val normalizedEmail = email.trim().lowercase()
+        if (normalizedEmail.isBlank() || prefs.contains("password_hash")) return false
+        val salt = ByteArray(PASSWORD_SALT_BYTES).also(SecureRandom()::nextBytes)
+        userName = name.trim()
+        userEmail = normalizedEmail
+        userPhone = phone.trim()
+        prefs.edit()
+            .putString("password_salt", Base64.encodeToString(salt, Base64.NO_WRAP))
+            .putString("password_hash", hashPassword(password, salt))
+            .apply()
+        return true
+    }
+
+    fun authenticate(email: String, password: String): Boolean {
+        val normalizedEmail = email.trim().lowercase()
+        val storedEmail = userEmail ?: return false
+        val encodedSalt = prefs.getString("password_salt", null) ?: return false
+        val storedHash = prefs.getString("password_hash", null) ?: return false
+        val salt = runCatching { Base64.decode(encodedSalt, Base64.NO_WRAP) }.getOrNull() ?: return false
+        return storedEmail == normalizedEmail && storedHash == hashPassword(password, salt)
+    }
+
+    fun resetPassword(email: String, newPassword: String): Boolean {
+        if (userEmail != email.trim().lowercase() || !prefs.contains("password_hash")) return false
+        val salt = ByteArray(PASSWORD_SALT_BYTES).also(SecureRandom()::nextBytes)
+        prefs.edit()
+            .putString("password_salt", Base64.encodeToString(salt, Base64.NO_WRAP))
+            .putString("password_hash", hashPassword(newPassword, salt))
+            .apply()
+        return true
+    }
+
+    private fun hashPassword(password: String, salt: ByteArray): String {
+        val spec = PBEKeySpec(password.toCharArray(), salt, PASSWORD_ITERATIONS, PASSWORD_KEY_BITS)
+        return try {
+            val key = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec)
+            Base64.encodeToString(key.encoded, Base64.NO_WRAP)
+        } finally {
+            spec.clearPassword()
+        }
+    }
+
     fun addRewardPoints(points: Int) {
         if (points > 0) prefs.edit().run {
             val current = prefs.getInt("reward_points", 0)
@@ -139,4 +198,7 @@ object AppPrefs {
     fun isInitialized(): Boolean = ::prefs.isInitialized
 
     private const val TAG = "AppPrefs"
+    private const val PASSWORD_SALT_BYTES = 16
+    private const val PASSWORD_ITERATIONS = 120_000
+    private const val PASSWORD_KEY_BITS = 256
 }

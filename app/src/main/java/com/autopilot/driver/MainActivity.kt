@@ -45,6 +45,10 @@ class MainActivity : AppCompatActivity() {
             } else {
                 val min = binding.etMinPrice.text.toString().toDoubleOrNull() ?: 0.0
                 val max = binding.etMaxPrice.text.toString().toDoubleOrNull() ?: 99999.0
+                if (!min.isFinite() || !max.isFinite() || min < 0 || max < 0) {
+                    Toast.makeText(this, "Enter valid price values", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
                 if (max < min) {
                     Toast.makeText(this, "Max must be >= Min", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
@@ -131,12 +135,12 @@ class MainActivity : AppCompatActivity() {
             binding.tvBotStatus.text = "Status: RUNNING"
             binding.tvBotStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
             binding.btnToggleBot.text = "STOP"
-            binding.btnToggleBot.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
+            binding.btnToggleBot.setBackgroundResource(com.autopilot.driver.R.drawable.bg_button_secondary)
         } else {
             binding.tvBotStatus.text = "Status: STOPPED"
             binding.tvBotStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
             binding.btnToggleBot.text = "START"
-            binding.btnToggleBot.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
+            binding.btnToggleBot.setBackgroundResource(com.autopilot.driver.R.drawable.bg_button_primary)
         }
     }
 

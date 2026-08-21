@@ -23,7 +23,17 @@ class ForgotPasswordActivity : AppCompatActivity() {
                 Toast.makeText(this, "Invalid email format", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            Toast.makeText(this, "Password reset service is not configured yet.", Toast.LENGTH_LONG).show()
+            val password = binding.etNewPassword.text.toString()
+            if (password.length < 8) {
+                Toast.makeText(this, "New password must be at least 8 characters", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (AppPrefs.resetPassword(email, password)) {
+                Toast.makeText(this, "Password updated. You can log in now.", Toast.LENGTH_LONG).show()
+                finish()
+            } else {
+                Toast.makeText(this, "No account found for this email", Toast.LENGTH_SHORT).show()
+            }
         }
 
         binding.tvBack.setOnClickListener {

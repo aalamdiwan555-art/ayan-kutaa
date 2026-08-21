@@ -26,12 +26,18 @@ class LoginActivity : AppCompatActivity() {
                 Toast.makeText(this, "Invalid email format", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            if (password.length < 6) {
-                Toast.makeText(this, "Password must be at least 6 characters", Toast.LENGTH_SHORT).show()
+            if (password.length < 8) {
+                Toast.makeText(this, "Password must be at least 8 characters", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            Toast.makeText(this, "Authentication service is not configured yet.", Toast.LENGTH_LONG).show()
+            if (!AppPrefs.authenticate(email, password)) {
+                Toast.makeText(this, "Incorrect email or password", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            AppPrefs.isLoggedIn = true
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
         }
 
         binding.tvSignup.setOnClickListener {

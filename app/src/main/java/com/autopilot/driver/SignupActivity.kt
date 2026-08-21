@@ -28,16 +28,23 @@ class SignupActivity : AppCompatActivity() {
                 Toast.makeText(this, "Invalid email format", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            if (password.length < 6) {
-                Toast.makeText(this, "Password must be at least 6 characters", Toast.LENGTH_SHORT).show()
+            if (password.length < 8) {
+                Toast.makeText(this, "Password must be at least 8 characters", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            if (phone.length !in 10..15 || !phone.all { it.isDigit() }) {
+            val normalizedPhone = phone.filter(Char::isDigit)
+            if (normalizedPhone.length !in 10..15) {
                 Toast.makeText(this, "Invalid phone number", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            Toast.makeText(this, "Authentication service is not configured yet.", Toast.LENGTH_LONG).show()
+            if (!AppPrefs.registerUser(name, email, normalizedPhone, password)) {
+                Toast.makeText(this, "An account already exists on this device", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            AppPrefs.isLoggedIn = true
+            startActivity(Intent(this, MainActivity::class.java))
+            finishAffinity()
         }
 
         binding.tvLogin.setOnClickListener {

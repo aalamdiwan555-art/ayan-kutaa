@@ -16,7 +16,7 @@ class OnboardingActivity : AppCompatActivity() {
         binding = ActivityOnboardingBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        if (AppPrefs.isOnboardingComplete) {
+        if (AppPrefs.isOnboardingComplete && permissionsGranted()) {
             if (AppPrefs.isLoggedIn) {
                 startActivity(Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
@@ -71,6 +71,9 @@ class OnboardingActivity : AppCompatActivity() {
             navigateToLogin()
         }
     }
+
+    private fun permissionsGranted(): Boolean =
+        isAccessibilityEnabled() && Settings.canDrawOverlays(this)
 
     private fun isAccessibilityEnabled(): Boolean {
         val enabledServices = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
