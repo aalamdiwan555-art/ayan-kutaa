@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp"
+    android:background="@drawable/bg_screen">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+         android:text="@string/welcome"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:textColor="@color/primary"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+         android:text="@string/permissions_continue"
+        android:textSize="14sp"
+        android:textColor="@color/gray"
+        android:layout_marginBottom="32dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_card"
+        android:padding="16dp"
+        android:layout_marginBottom="16dp">
+
+        <TextView
+            android:id="@+id/tvAccessibilityStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+             android:text="@string/accessibility_required"
+            android:textColor="@android:color/holo_red_dark"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnGrantAccessibility"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+             android:text="@string/grant_accessibility"
+             android:contentDescription="@string/grant_accessibility"
+            android:textAllCaps="false"
+            android:background="@drawable/bg_button_secondary" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_card"
+        android:padding="16dp"
+        android:layout_marginBottom="32dp">
+
+        <TextView
+            android:id="@+id/tvOverlayStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+             android:text="@string/overlay_required"
+            android:textColor="@android:color/holo_red_dark"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnGrantOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+             android:text="@string/grant_overlay"
+             android:contentDescription="@string/grant_overlay"
+            android:textAllCaps="false"
+            android:background="@drawable/bg_button_secondary" />
+    </LinearLayout>
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btnContinue"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+         android:text="@string/continue_label"
+         android:contentDescription="@string/continue_label"
+        android:textColor="@android:color/white"
+        android:textAllCaps="false"
+        android:textSize="16sp"
+        android:enabled="false"
+        android:background="@drawable/bg_button_primary" />
+
+</LinearLayout>

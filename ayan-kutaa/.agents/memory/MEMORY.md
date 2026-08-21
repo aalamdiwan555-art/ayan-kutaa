@@ -1,0 +1,1 @@
+- [GitHub push authentication](github-push-auth.md) — Git smart HTTP needs Basic token auth even when API bearer auth works.

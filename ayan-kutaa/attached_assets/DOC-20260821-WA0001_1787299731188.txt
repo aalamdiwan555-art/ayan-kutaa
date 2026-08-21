@@ -1,0 +1,922 @@
+================================================================================
+                    AYAN-KUTAA BUG REPORT & FIXES
+                    Full Code Audit - 50+ Bugs Found
+================================================================================
+Repository: https://github.com/aalamdiwan555-art/ayan-kutaa
+Date: 2026-08-21
+Severity Scale: [CRITICAL] [HIGH] [MEDIUM] [LOW]
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. RideAccessibilityService.kt ............ 18 bugs
+2. MainActivity.kt ....................... 8 bugs
+3. AppPrefs.kt ........................... 7 bugs
+4. OcrKeywords.kt ........................ 4 bugs
+5. LoginActivity.kt / SignupActivity.kt .. 4 bugs
+6. AdminActivity.kt ...................... 2 bugs
+7. OnboardingActivity.kt ................. 3 bugs
+8. AndroidManifest.xml ................... 4 bugs
+9. BootReceiver.kt ....................... 2 bugs
+10. AdManager.kt ......................... 2 bugs
+11. Gradle / Build ....................... 2 bugs
+
+================================================================================
+SECTION 1: RideAccessibilityService.kt (18 BUGS)
+================================================================================
+
+BUG-001 [CRITICAL] normalizeDigits() corrupts ALL non-digit characters
+------------------------------------------------------------------------
+The else branch converts every non-Indic-digit character to its Unicode 
+codepoint number, then back to a Char. This turns the Rupee symbol into 
+a random CJK character, destroys spaces, commas, and Latin letters. 
+Price regex will NEVER match after normalization.
+
+BROKEN CODE:
+    else -> character.code
+
+FIX:
+    else -> character
+
+CORRECTED METHOD:
+    private fun String.normalizeDigits(): String = buildString(length) {
+        for (character in this@normalizeDigits) {
+            append(
+                when (character) {
+                    in '\u0966'..'\u096F' -> (character - '\u0966' + '0'.code).toChar()
+                    in '\u0660'..'\u0669' -> (character - '\u0660' + '0'.code).toChar()
+                    in '\u06F0'..'\u06F9' -> (character - '\u06F0' + '0'.code).toChar()
+                    else -> character
+                }
+            )
+        }
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-002 [CRITICAL] Rides with unparseable price are ALWAYS accepted
+------------------------------------------------------------------------
+The price filter logic only returns (skips) when price is NOT null AND 
+outside the range. If price == null (regex failed), the code falls 
+through and clicks the Accept button unconditionally.
+
+BROKEN CODE:
+    if (price != null && (price < minPrice || price > maxPrice)) return
+
+FIX:
+    if (price == null || price < minPrice || price > maxPrice) return
+
+    // OR, if you want to accept when price cannot be read:
+    // if (price != null && (price < minPrice || price > maxPrice)) return
+
+--------------------------------------------------------------------------------
+
+BUG-003 [CRITICAL] Missing accessibility_service_config.xml
+------------------------------------------------------------------------
+AndroidManifest.xml references @xml/accessibility_service_config but this 
+file does NOT exist in the repository. The build will fail or the service 
+will not be discoverable by the system on some Android versions.
+
+FIX: Create app/src/main/res/xml/accessibility_service_config.xml:
+
+    <?xml version="1.0" encoding="utf-8"?>
+    <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+        android:description="@string/accessibility_service_description"
+        android:packageNames="com.ubercab,com.olacabs.customer,com.didi.global"
+        android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged"
+        android:accessibilityFlags="flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
+        android:canRetrieveWindowContent="true"
+        android:notificationTimeout="100"
+        android:settingsActivity="com.autopilot.driver.MainActivity" />
+
+--------------------------------------------------------------------------------
+
+BUG-004 [HIGH] No package name filtering - scans EVERY app
+------------------------------------------------------------------------
+The service processes events from ALL apps (WhatsApp, Settings, Browser, 
+etc.), wasting battery and risking accidental clicks.
+
+BROKEN CODE:
+    override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        // No event.packageName check
+
+FIX:
+    companion object {
+        private val TARGET_PACKAGES = setOf(
+            "com.ubercab.driver",
+            "com.olacabs.provider",
+            "com.didi.global.passenger",
+            // Add other ride apps here
+        )
+    }
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        val pkg = event.packageName?.toString() ?: return
+        if (pkg !in TARGET_PACKAGES) return
+        ...
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-005 [HIGH] Debounce logic has race condition
+------------------------------------------------------------------------
+Two threads can pass the time check before either calls compareAndSet, 
+causing both to scan simultaneously. The loser returns without updating 
+lastScanAt, so the next event passes immediately.
+
+BROKEN CODE:
+    if (now - lastScanAt.get() < SCAN_DEBOUNCE_MS ||
+        !scanInProgress.compareAndSet(false, true)
+    ) return
+    lastScanAt.set(now)
+
+FIX:
+    if (!scanInProgress.compareAndSet(false, true)) return
+    val now = System.currentTimeMillis()
+    if (now - lastScanAt.get() < SCAN_DEBOUNCE_MS) {
+        scanInProgress.set(false)
+        return
+    }
+    lastScanAt.set(now)
+
+--------------------------------------------------------------------------------
+
+BUG-006 [HIGH] CoroutineExceptionHandler missing - crashes swallowed
+------------------------------------------------------------------------
+SupervisorJob prevents child coroutine failures from cancelling siblings, 
+but exceptions are silently dropped. A crash in scanAndAccept is never 
+logged.
+
+FIX:
+    private val exceptionHandler = CoroutineExceptionHandler { _, t ->
+        Log.e("RideService", "Coroutine error", t)
+    }
+    private val serviceScope = CoroutineScope(
+        Dispatchers.Default + SupervisorJob() + exceptionHandler
+    )
+
+--------------------------------------------------------------------------------
+
+BUG-007 [HIGH] Dispatchers.Main used for heavy tree scanning
+------------------------------------------------------------------------
+Scanning the accessibility tree on the Main thread can cause ANRs if the 
+window has many nodes.
+
+FIX:
+    // Use Default dispatcher for CPU work, Main only for Toast
+    serviceScope.launch(Dispatchers.Default) {
+        val root = rootInActiveWindow ?: run {
+            scanInProgress.set(false)
+            return@launch
+        }
+        try {
+            scanAndAccept(root)
+        } finally {
+            root.recycle()
+            scanInProgress.set(false)
+        }
+    }
+
+    // Toast must be on Main thread:
+    withContext(Dispatchers.Main) {
+        Toast.makeText(...).show()
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-008 [HIGH] scanInProgress never resets if scope is cancelled abruptly
+------------------------------------------------------------------------
+If the process dies while scanInProgress is true, it stays true forever 
+(until service restart). Should reset in onServiceConnected.
+
+FIX:
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        scanInProgress.set(false)
+        lastScanAt.set(0)
+        lastClickAt.set(0)
+        ...
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-009 [MEDIUM] Accepts rides when screen is off / locked
+------------------------------------------------------------------------
+The service keeps scanning even when the screen is off, wasting battery 
+and potentially accepting rides while the phone is in the pocket.
+
+FIX: Add screen state check at the top of onAccessibilityEvent:
+    val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+    if (!powerManager.isInteractive) return
+
+--------------------------------------------------------------------------------
+
+BUG-010 [MEDIUM] findAcceptButton picks first match, not best match
+------------------------------------------------------------------------
+If multiple clickable nodes match keywords, the first one is clicked. 
+This could be a Cancel button that contains Accept in its description.
+
+FIX: Score candidates and pick the best one:
+    private fun findAcceptButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val candidates = mutableListOf<Pair<AccessibilityNodeInfo, Int>>()
+        traverse(root) { node ->
+            if (node.isClickable) {
+                val text = node.nodeText()
+                val score = acceptKeywords.sumOf { keyword ->
+                    if (text.contains(keyword, ignoreCase = true)) keyword.length else 0
+                }
+                if (score > 0) candidates.add(AccessibilityNodeInfo.obtain(node) to score)
+            }
+        }
+        return candidates.maxByOrNull { it.second }?.first
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-011 [MEDIUM] No fallback for ACTION_CLICK failure
+------------------------------------------------------------------------
+Some OEM skins (Xiaomi, Samsung, Oppo) block performAction on certain 
+nodes. The app silently fails to click.
+
+FIX: Add gesture fallback:
+    val clicked = acceptButton.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+    if (!clicked) {
+        val rect = android.graphics.Rect()
+        acceptButton.getBoundsInScreen(rect)
+        val path = android.graphics.Path().apply {
+            moveTo(rect.centerX().toFloat(), rect.centerY().toFloat())
+        }
+        val gesture = android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 100))
+            .build()
+        dispatchGesture(gesture, null, null)
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-012 [MEDIUM] Double-recycle risk in traverse() for caller's root
+------------------------------------------------------------------------
+The caller (onAccessibilityEvent) recycles root, and traverse() also 
+obtains and recycles a copy. While obtain() creates a new reference, if 
+rootInActiveWindow returns the same underlying node and the system 
+recycles it internally, this can cause unpredictable behavior.
+
+FIX: Do not obtain a copy in traverse; use the passed root directly:
+    private fun traverse(root: AccessibilityNodeInfo, visitor: (AccessibilityNodeInfo) -> Unit) {
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)  // Do not obtain here
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            try {
+                visitor(node)
+                for (i in 0 until node.childCount) {
+                    node.getChild(i)?.let(queue::add)
+                }
+            } finally {
+                node.recycle()
+            }
+        }
+    }
+
+    // Caller must NOT recycle root after calling traverse:
+    // Remove root?.recycle() from onAccessibilityEvent's finally block
+
+--------------------------------------------------------------------------------
+
+BUG-013 [MEDIUM] notificationTimeout too aggressive (100ms)
+------------------------------------------------------------------------
+100ms generates too many events, causing high CPU/battery drain.
+
+FIX:
+    notificationTimeout = 300  // 300ms is sufficient for ride apps
+
+--------------------------------------------------------------------------------
+
+BUG-014 [MEDIUM] TYPE_VIEW_CLICKED event triggers full tree scan
+------------------------------------------------------------------------
+The service listens for TYPE_VIEW_CLICKED but does not use the event data. 
+Every click anywhere triggers a full scan.
+
+FIX: Remove TYPE_VIEW_CLICKED from eventTypes, or use event.source to 
+scan only the changed node subtree instead of the entire window.
+
+--------------------------------------------------------------------------------
+
+BUG-015 [LOW] Price regex does not handle Indian lakh/crore separators
+------------------------------------------------------------------------
+Numbers like 1,50,000 are parsed as 150000 which is fine, but 1.50.000 
+or 1 50 000 are not handled.
+
+FIX: Add more patterns:
+    Regex("""(?:Rs\.?|RS\.?|INR)?\s*([0-9,.]+(?:\.[0-9]{1,2})?)"""),
+    Regex("""([0-9\s]+)\s*(?:Rs\.?|RS\.?|INR)?""")
+
+--------------------------------------------------------------------------------
+
+BUG-016 [LOW] findPriceOnScreen takes MAX price instead of ride price
+------------------------------------------------------------------------
+If the screen shows multiple numbers (tip, toll, original fare), the 
+highest is picked. This may not be the actual ride payout.
+
+FIX: Look for price near the accept button instead of globally:
+    private fun findPriceNearButton(button: AccessibilityNodeInfo, root: AccessibilityNodeInfo): Double? {
+        val btnRect = android.graphics.Rect()
+        button.getBoundsInScreen(btnRect)
+        var bestPrice: Double? = null
+        traverse(root) { node ->
+            val nodeRect = android.graphics.Rect()
+            node.getBoundsInScreen(nodeRect)
+            val distance = kotlin.math.hypot(
+                (btnRect.centerX() - nodeRect.centerX()).toDouble(),
+                (btnRect.centerY() - nodeRect.centerY()).toDouble()
+            )
+            if (distance < 500) { // Within 500px
+                val text = node.nodeText().normalizeDigits()
+                ... // parse price
+            }
+        }
+        return bestPrice
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-017 [LOW] AppPrefs may be uninitialized if service starts before Application
+------------------------------------------------------------------------
+If the system binds the accessibility service before MyApplication.onCreate 
+finishes, any AppPrefs access crashes with UninitializedPropertyAccessException.
+
+FIX: Add lazy init guard in AppPrefs or in the service:
+    // In RideAccessibilityService.onServiceConnected()
+    if (!::prefs.isInitialized) {
+        AppPrefs.init(this)
+    }
+
+================================================================================
+SECTION 2: MainActivity.kt (8 BUGS)
+================================================================================
+
+BUG-018 [CRITICAL] isAccessibilityEnabled() gives false positives
+------------------------------------------------------------------------
+Uses contains(packageName) which matches ANY service from ANY package 
+that contains "com.autopilot.driver" as a substring.
+
+BROKEN CODE:
+    return enabledServices.contains(packageName)
+
+FIX:
+    private fun isAccessibilityEnabled(): Boolean {
+        val enabledServices = Settings.Secure.getString(
+            contentResolver, 
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        val expected = "$packageName/.RideAccessibilityService"
+        return enabledServices.split(":").any { it.trim() == expected }
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-019 [HIGH] BotState & AppPrefs.isBotRunning get out of sync
+------------------------------------------------------------------------
+If the process is killed, BotState.isRunning (in-memory) resets to false 
+but AppPrefs.isBotRunning stays true. The UI shows STOPPED but the user 
+expects it to resume.
+
+FIX: In MainActivity.onCreate, restore BotState from prefs:
+    if (savedInstanceState == null) {
+        BotState.isRunning = AppPrefs.isBotRunning && AppPrefs.hasActiveSubscription()
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-020 [HIGH] Logout does not stop BotState
+------------------------------------------------------------------------
+AppPrefs.clear() wipes data but BotState.isRunning stays true. The 
+accessibility service may keep scanning for a logged-out user.
+
+FIX:
+    binding.btnLogout.setOnClickListener {
+        BotState.isRunning = false           // ADD THIS
+        AppPrefs.isBotRunning = false        // ADD THIS
+        AppPrefs.clear()
+        startActivity(Intent(this, LoginActivity::class.java))
+        finish()
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-021 [MEDIUM] No overlay permission check at runtime
+------------------------------------------------------------------------
+Onboarding checks overlay once, but MainActivity never re-checks. If the 
+user revokes it later, any overlay code will crash.
+
+FIX: Add check in startBot():
+    if (!Settings.canDrawOverlays(this)) {
+        Toast.makeText(this, "Overlay permission required", Toast.LENGTH_LONG).show()
+        startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+        return
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-022 [MEDIUM] Interstitial ad shown immediately on activity open
+------------------------------------------------------------------------
+Bad UX and violates most ad network policies (cannot show on app open).
+
+FIX: Move to after a user action, e.g., after STOP button tap, or use 
+a rewarded ad instead.
+
+--------------------------------------------------------------------------------
+
+BUG-023 [LOW] updateSubscriptionUI() uses Locale.getDefault() - inconsistent
+------------------------------------------------------------------------
+Date formatting can vary across devices. Use Locale.ENGLISH for consistent 
+"dd MMM yyyy" output.
+
+FIX:
+    val sdf = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH)
+
+--------------------------------------------------------------------------------
+
+BUG-024 [LOW] No validation that accessibility service is actually running
+------------------------------------------------------------------------
+startBot() just sets flags. If the system killed the service, the bot 
+appears active but does nothing.
+
+FIX: Check if the service is bound before allowing start:
+    private fun isServiceRunning(): Boolean {
+        val manager = getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        return manager.getEnabledAccessibilityServiceList(
+            AccessibilityServiceInfo.FEEDBACK_GENERIC
+        ).any { it.resolveInfo.serviceInfo.name == "RideAccessibilityService" }
+    }
+
+================================================================================
+SECTION 3: AppPrefs.kt (7 BUGS)
+================================================================================
+
+BUG-025 [HIGH] Sensitive data stored unencrypted in SharedPreferences
+------------------------------------------------------------------------
+Auth tokens, subscription state, admin identity - all in plaintext. 
+Rooted devices or backup extraction can steal these.
+
+FIX: Use EncryptedSharedPreferences:
+    import androidx.security.crypto.EncryptedSharedPreferences
+    import androidx.security.crypto.MasterKey
+
+    fun init(context: Context) {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        prefs = EncryptedSharedPreferences.create(
+            context,
+            NAME,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }
+
+    // Add to build.gradle:
+    // implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+--------------------------------------------------------------------------------
+
+BUG-026 [MEDIUM] Double values stored as strings
+------------------------------------------------------------------------
+minPrice/maxPrice use putString/getString with toDoubleOrNull. This is 
+inefficient and error-prone.
+
+FIX: Store as float (or long cents):
+    var minPrice: Double
+        get() = prefs.getFloat("min_price_f", 0f).toDouble()
+        set(value) = prefs.edit().putFloat("min_price_f", value.toFloat()).apply()
+
+    // Or store as long cents to avoid float precision issues:
+    var minPriceCents: Long
+        get() = prefs.getLong("min_price_cents", 0)
+        set(value) = prefs.edit().putLong("min_price_cents", value).apply()
+
+--------------------------------------------------------------------------------
+
+BUG-027 [MEDIUM] apply() used for critical state changes
+------------------------------------------------------------------------
+apply() is async. If the app crashes immediately after login, the token 
+might not be persisted.
+
+FIX: Use commit() for critical writes:
+    var isLoggedIn: Boolean
+        get() = prefs.getBoolean("is_logged_in", false)
+        set(value) = prefs.edit().putBoolean("is_logged_in", value).commit()
+
+--------------------------------------------------------------------------------
+
+BUG-028 [MEDIUM] addRewardPoints() read-modify-write not atomic
+------------------------------------------------------------------------
+Concurrent calls can lose points.
+
+FIX:
+    fun addRewardPoints(points: Int) {
+        prefs.edit {
+            val current = prefs.getInt("reward_points", 0)
+            putInt("reward_points", (current + points).coerceAtLeast(0))
+        }.commit()
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-029 [LOW] No input validation on email/password fields
+------------------------------------------------------------------------
+Any string is accepted. Should validate format.
+
+FIX (add to AppPrefs or a Validator object):
+    fun isValidEmail(email: String): Boolean =
+        android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
+
+--------------------------------------------------------------------------------
+
+BUG-030 [LOW] isAuthorizedAdmin() is client-side only
+------------------------------------------------------------------------
+The admin email is hardcoded. Anyone can decompile the APK, change the 
+email constant, and gain admin access.
+
+FIX: Verify admin status server-side, or at least sign the admin claim 
+with a secret key stored on the server.
+
+================================================================================
+SECTION 4: OcrKeywords.kt (4 BUGS)
+================================================================================
+
+BUG-031 [MEDIUM] Duplicate keywords waste CPU
+------------------------------------------------------------------------
+"accept", "Accept", "ACCEPT" with ignoreCase=true is redundant.
+
+FIX: Remove duplicates, keep only lowercase:
+    val ACCEPT_KEYWORDS = listOf(
+        "accept", "accept ride", "accept now", "new ride", "tap to accept",
+        "accept trip", "confirm", "take ride", "pick up",
+        // Hindi
+        "swikaar karen", "swikaar", "raaid swikaar karen", "nayi raaid", "swikaaren",
+        // ... etc
+    )
+
+--------------------------------------------------------------------------------
+
+BUG-032 [MEDIUM] "Pick Up" keyword is too generic
+------------------------------------------------------------------------
+"Pick Up" appears in many non-ride contexts (food delivery, courier apps).
+
+FIX: Remove "Pick Up" or make it lower priority / require proximity to 
+price text.
+
+--------------------------------------------------------------------------------
+
+BUG-033 [MEDIUM] Price regex character class is wrong
+------------------------------------------------------------------------
+Inside a character class, . is literal dot and \s is whitespace. 
+The regex [Rs.\s] matches R, s, ., or whitespace - but NOT the string 
+"Rs." as a prefix.
+
+FIX:
+    Regex("""(?:Rs\.?|RS\.?|INR)\s*([0-9,]+(?:\.[0-9]{1,2})?)"""),
+    Regex("""([0-9,]+(?:\.[0-9]{1,2})?)\s*(?:Rs\.?|RS\.?)"""),
+
+--------------------------------------------------------------------------------
+
+BUG-034 [LOW] Missing "Earn" / "Earnings" keywords for some apps
+------------------------------------------------------------------------
+Some apps show "Earn 245" instead of a price. Add:
+    "earn", "earnings", "you will earn", "estimated fare"
+
+================================================================================
+SECTION 5: LoginActivity.kt / SignupActivity.kt / ForgotPasswordActivity.kt (4 BUGS)
+================================================================================
+
+BUG-035 [CRITICAL] Fake authentication - no actual login
+------------------------------------------------------------------------
+LoginActivity, SignupActivity, and ForgotPasswordActivity have ZERO 
+backend integration. Anyone can "login" with any email/password.
+
+BROKEN CODE (LoginActivity):
+    AppPrefs.isLoggedIn = true
+    AppPrefs.userEmail = email
+    AppPrefs.authToken = "token_${System.currentTimeMillis()}"
+
+FIX: Integrate Retrofit (already in dependencies):
+    interface AuthApi {
+        @POST("auth/login")
+        suspend fun login(@Body req: LoginRequest): Response<LoginResponse>
+    }
+
+    // In LoginActivity:
+    lifecycleScope.launch {
+        val response = api.login(LoginRequest(email, password))
+        if (response.isSuccessful) {
+            AppPrefs.isLoggedIn = true
+            AppPrefs.userEmail = email
+            AppPrefs.authToken = response.body()?.token
+        } else {
+            Toast.makeText(this@LoginActivity, "Invalid credentials", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-036 [HIGH] No email format validation
+------------------------------------------------------------------------
+Any garbage string is accepted as email.
+
+FIX:
+    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+        Toast.makeText(this, "Invalid email format", Toast.LENGTH_SHORT).show()
+        return@setOnClickListener
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-037 [MEDIUM] No password strength check
+------------------------------------------------------------------------
+Single-character passwords are accepted.
+
+FIX:
+    if (password.length < 6) {
+        Toast.makeText(this, "Password must be at least 6 characters", Toast.LENGTH_SHORT).show()
+        return@setOnClickListener
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-038 [MEDIUM] Signup does not validate phone number
+------------------------------------------------------------------------
+No format or length check.
+
+FIX:
+    if (phone.length !in 10..15 || !phone.all { it.isDigit() }) {
+        Toast.makeText(this, "Invalid phone number", Toast.LENGTH_SHORT).show()
+        return@setOnClickListener
+    }
+
+================================================================================
+SECTION 6: AdminActivity.kt (2 BUGS)
+================================================================================
+
+BUG-039 [HIGH] Admin check only in onCreate, not onResume
+------------------------------------------------------------------------
+If admin status is revoked while activity is backgrounded, the user keeps 
+admin access.
+
+FIX:
+    override fun onResume() {
+        super.onResume()
+        if (!AppPrefs.isAuthorizedAdmin()) {
+            Toast.makeText(this, "Admin access revoked", Toast.LENGTH_SHORT).show()
+            finish()
+        }
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-040 [MEDIUM] No server-side admin verification
+------------------------------------------------------------------------
+(See BUG-030) - client-side admin check is trivially bypassed.
+
+================================================================================
+SECTION 7: OnboardingActivity.kt (3 BUGS)
+================================================================================
+
+BUG-041 [MEDIUM] Same isAccessibilityEnabled() false positive
+------------------------------------------------------------------------
+(See BUG-018)
+
+--------------------------------------------------------------------------------
+
+BUG-042 [MEDIUM] Continue button race condition
+------------------------------------------------------------------------
+User can enable permissions, tap Continue, then immediately disable them. 
+The check only happens at tap time.
+
+FIX: Re-check in onResume before navigating:
+    override fun onResume() {
+        super.onResume()
+        updateStatus()
+        if (AppPrefs.isOnboardingComplete && isAccessibilityEnabled() && Settings.canDrawOverlays(this)) {
+            navigateToLogin()
+        }
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-043 [LOW] Overlay permission not re-checked after returning from settings
+------------------------------------------------------------------------
+The onResume updates the UI but does not auto-navigate if both are now 
+granted. User must tap Continue again.
+
+FIX: Auto-navigate when both permissions are granted:
+    private fun updateStatus() {
+        ...
+        if (accessibilityEnabled && overlayEnabled && AppPrefs.isOnboardingComplete) {
+            navigateToLogin()
+        }
+    }
+
+================================================================================
+SECTION 8: AndroidManifest.xml (4 BUGS)
+================================================================================
+
+BUG-044 [CRITICAL] android:usesCleartextTraffic="true"
+------------------------------------------------------------------------
+Allows HTTP traffic. Man-in-the-middle attacks can steal auth tokens.
+
+FIX: Remove the attribute and use HTTPS only. If you MUST support HTTP 
+for a specific domain, use network_security_config.xml:
+    <network-security-config>
+        <domain-config cleartextTrafficPermitted="true">
+            <domain includeSubdomains="true">your-api-domain.com</domain>
+        </domain-config>
+    </network-security-config>
+
+--------------------------------------------------------------------------------
+
+BUG-045 [HIGH] android:allowBackup="true"
+------------------------------------------------------------------------
+SharedPreferences (including fake auth tokens) can be backed up and 
+restored to another device or extracted via adb backup.
+
+FIX:
+    android:allowBackup="false"
+    android:fullBackupContent="false"
+
+--------------------------------------------------------------------------------
+
+BUG-046 [MEDIUM] Accessibility service exported="true"
+------------------------------------------------------------------------
+Only the system should bind to accessibility services. exported="true" 
+allows malicious apps to bind.
+
+FIX:
+    android:exported="false"
+
+--------------------------------------------------------------------------------
+
+BUG-047 [MEDIUM] Missing accessibility_service_config.xml reference
+------------------------------------------------------------------------
+(See BUG-003)
+
+================================================================================
+SECTION 9: BootReceiver.kt (2 BUGS)
+================================================================================
+
+BUG-048 [MEDIUM] BootReceiver is completely empty
+------------------------------------------------------------------------
+Does nothing. If you want to restore bot state after reboot, you need 
+to restart the service or at least reset flags.
+
+FIX:
+    class BootReceiver : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+                BotState.isRunning = false
+                AppPrefs.isBotRunning = false
+            }
+        }
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-049 [LOW] BOOT_COMPLETED receiver declared but useless
+------------------------------------------------------------------------
+(See BUG-048)
+
+================================================================================
+SECTION 10: AdManager.kt (2 BUGS)
+================================================================================
+
+BUG-050 [MEDIUM] Hardcoded StartApp app ID
+------------------------------------------------------------------------
+"207133232" is hardcoded. Should be in BuildConfig or strings.xml.
+
+FIX: Move to BuildConfig field:
+    // build.gradle.kts
+    buildConfigField("String", "STARTAPP_ID", "\"207133232\"")
+
+    // AdManager.kt
+    StartAppSDK.init(app, BuildConfig.STARTAPP_ID, true)
+
+--------------------------------------------------------------------------------
+
+BUG-051 [LOW] showInterstitial() called without consent check
+------------------------------------------------------------------------
+GDPR/ePrivacy requires user consent before showing personalized ads.
+
+FIX: Add consent check before showing ads, or use non-personalized ads.
+
+================================================================================
+SECTION 11: Gradle / Build (2 BUGS)
+================================================================================
+
+BUG-052 [MEDIUM] isMinifyEnabled = false
+------------------------------------------------------------------------
+APK size is bloated and code is easily reverse-engineered.
+
+FIX:
+    release {
+        isMinifyEnabled = true
+        isShrinkResources = true
+        proguardFiles(
+            getDefaultProguardFile("proguard-android-optimize.txt"),
+            "proguard-rules.pro"
+        )
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-053 [LOW] proguard-rules.pro is empty
+------------------------------------------------------------------------
+With minification enabled, you will need to keep AccessibilityService and 
+Retrofit models.
+
+FIX: Add to proguard-rules.pro:
+    -keep class com.autopilot.driver.** { *; }
+    -keepclassmembers class * extends android.accessibilityservice.AccessibilityService { *; }
+    -keepclassmembers class * extends android.app.Application { *; }
+
+================================================================================
+                              SUMMARY
+================================================================================
+
+CRITICAL (App will crash or behave dangerously):
+  BUG-001  normalizeDigits() corrupts text
+  BUG-002  Unparseable price = auto-accept
+  BUG-003  Missing accessibility_service_config.xml
+  BUG-018  False positive accessibility check
+  BUG-025  Unencrypted sensitive data
+  BUG-035  Fake authentication
+  BUG-044  Cleartext traffic enabled
+
+HIGH (Major functionality broken or security risk):
+  BUG-004  No package filtering
+  BUG-005  Debounce race condition
+  BUG-006  Silent coroutine crashes
+  BUG-007  ANR from Main thread scanning
+  BUG-008  scanInProgress stuck forever
+  BUG-019  BotState out of sync
+  BUG-020  Logout does not stop bot
+  BUG-030  Client-side admin bypass
+  BUG-036  No email validation
+  BUG-039  Admin check missing onResume
+  BUG-045  allowBackup exposes data
+  BUG-046  Service exported=true
+
+MEDIUM (UX issues, battery drain, reliability):
+  BUG-009  Screen-off scanning
+  BUG-010  Wrong button picked
+  BUG-011  ACTION_CLICK fails on OEMs
+  BUG-012  Double-recycle risk
+  BUG-013  notificationTimeout too low
+  BUG-014  TYPE_VIEW_CLICKED waste
+  BUG-015  Missing lakh separators
+  BUG-016  Global max price logic
+  BUG-021  No overlay re-check
+  BUG-022  Ad on activity open
+  BUG-023  Accessibility check wrong
+  BUG-026  String storage of doubles
+  BUG-027  apply() for critical state
+  BUG-028  Non-atomic reward points
+  BUG-031  Duplicate keywords
+  BUG-032  "Pick Up" too generic
+  BUG-033  Regex character class bug
+  BUG-037  No password strength
+  BUG-038  No phone validation
+  BUG-040  No server admin verify
+  BUG-041  Onboarding false positive
+  BUG-042  Continue race condition
+  BUG-047  Missing XML config file
+  BUG-048  Empty BootReceiver
+  BUG-050  Hardcoded ad ID
+  BUG-051  No ad consent
+  BUG-052  No minification
+
+LOW (Minor improvements):
+  BUG-017  Missing exception handler
+  BUG-024  Locale inconsistency
+  BUG-029  No email validator
+  BUG-034  Missing earn keywords
+  BUG-043  Auto-navigate after grant
+  BUG-049  Useless receiver
+  BUG-053  Empty proguard rules
+
+================================================================================
+                           PRIORITY FIX ORDER
+================================================================================
+
+1. Fix BUG-001 (normalizeDigits) - without this, price detection is broken
+2. Fix BUG-002 (null price handling) - prevents unwanted auto-accepts
+3. Fix BUG-003 (accessibility_service_config.xml) - app won't build/run
+4. Fix BUG-018 + BUG-041 (accessibility check) - false sense of security
+5. Fix BUG-035 (fake auth) - currently anyone can use the app
+6. Fix BUG-025 (encrypted prefs) - security
+7. Fix BUG-044 (cleartext) + BUG-045 (allowBackup) + BUG-046 (exported)
+8. Fix BUG-007 (Dispatchers.Default) - prevents ANRs
+9. Fix BUG-004 (package filter) - battery + safety
+10. Fix BUG-019 + BUG-020 (state sync) - reliability
+
+================================================================================

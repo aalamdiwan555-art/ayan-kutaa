@@ -1,0 +1,861 @@
+================================================================================
+         AYAN-KUTAA (com.autopilot.driver) — COMPLETE BUG REPORT
+         All Files Downloaded & Analyzed | 2026-08-21
+================================================================================
+
+SCOPE: Every .kt, .xml, .kts, .pro, .yml file in the repository
+FILES AUDITED: 31 files | BUGS FOUND: 47
+
+SEVERITY LEGEND:
+  [CRITICAL] = Crash, security breach, or completely broken feature
+  [HIGH]     = Major reliability/security issue
+  [MEDIUM]   = UX problem, performance drain, or minor reliability issue
+  [LOW]      = Code quality / best-practice violation
+
+================================================================================
+SECTION 1: CRITICAL BUGS (Fix Immediately)
+================================================================================
+
+BUG-C01 [CRITICAL] Accessibility service exported="true"
+--------------------------------------------------------
+FILE: app/src/main/AndroidManifest.xml
+LINE: ~49
+
+Only the Android system should bind to an accessibility service.
+exported="true" allows ANY app to bind to RideAccessibilityService.
+
+BROKEN:
+    <service
+        android:name=".RideAccessibilityService"
+        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+        android:exported="true"
+        android:stopWithTask="false">
+
+FIX:
+    <service
+        android:name=".RideAccessibilityService"
+        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+        android:exported="false"
+        android:stopWithTask="false">
+
+--------------------------------------------------------------------------------
+
+BUG-C02 [CRITICAL] Fake authentication — zero backend integration
+---------------------------------------------------------------
+FILES:
+  app/src/main/java/com/autopilot/driver/LoginActivity.kt
+  app/src/main/java/com/autopilot/driver/SignupActivity.kt
+  app/src/main/java/com/autopilot/driver/ForgotPasswordActivity.kt
+
+LoginActivity.kt sets isLoggedIn=true with ANY email/password:
+    AppPrefs.isLoggedIn = true
+    AppPrefs.userEmail = email
+    AppPrefs.authToken = "token_${System.currentTimeMillis()}"
+
+SignupActivity.kt does the same. ForgotPasswordActivity just shows a toast.
+Retrofit dependencies exist in build.gradle but are NEVER used.
+
+FIX: Implement real API calls. Example for LoginActivity.kt:
+
+    // 1. Create data classes
+    data class LoginRequest(val email: String, val password: String)
+    data class LoginResponse(val token: String, val email: String)
+
+    // 2. Create API interface
+    interface AuthApi {
+        @POST("auth/login")
+        suspend fun login(@Body req: LoginRequest): Response<LoginResponse>
+    }
+
+    // 3. In LoginActivity.kt onClick:
+    binding.btnLogin.setOnClickListener {
+        val email = binding.etEmail.text.toString().trim()
+        val password = binding.etPassword.text.toString().trim()
+
+        if (email.isEmpty() || password.isEmpty()) {
+            Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
+            return@setOnClickListener
+        }
+
+        lifecycleScope.launch {
+            val response = RetrofitClient.authApi.login(LoginRequest(email, password))
+            if (response.isSuccessful) {
+                AppPrefs.isLoggedIn = true
+                AppPrefs.userEmail = response.body()?.email
+                AppPrefs.authToken = response.body()?.token
+                startActivity(Intent(this@LoginActivity, MainActivity::class.java))
+                finish()
+            } else {
+                Toast.makeText(this@LoginActivity, "Invalid credentials", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-C03 [CRITICAL] Missing android:canPerformGestures in accessibility config
+---------------------------------------------------------------------------
+FILE: app/src/main/res/xml/accessibility_service_config.xml
+
+The service calls dispatchGesture() as a fallback when ACTION_CLICK fails.
+But the XML config does NOT declare android:canPerformGestures="true".
+Without this, dispatchGesture() will ALWAYS return false on API 24+.
+
+BROKEN:
+    <accessibility-service ...
+        android:canRetrieveWindowContent="true"
+        ... />
+
+FIX:
+    <accessibility-service ...
+        android:canRetrieveWindowContent="true"
+        android:canPerformGestures="true"
+        ... />
+
+--------------------------------------------------------------------------------
+
+BUG-C04 [CRITICAL] EncryptedSharedPreferences can crash on boot
+-----------------------------------------------------------
+FILE: app/src/main/java/com/autopilot/driver/BootReceiver.kt
+
+BootReceiver calls AppPrefs.init(context.applicationContext) on boot.
+On many Chinese OEM devices (Xiaomi, Oppo, Vivo), the Android Keystore is
+broken or slow to initialize at boot time. EncryptedSharedPreferences.create()
+can throw an exception, crashing the broadcast receiver silently.
+
+BROKEN:
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            AppPrefs.init(context.applicationContext)  // CAN CRASH
+            BotState.isRunning = false
+            AppPrefs.isBotRunning = false
+        }
+    }
+
+FIX:
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            try {
+                AppPrefs.init(context.applicationContext)
+            } catch (e: Exception) {
+                // Keystore not ready; skip cleanup this boot
+                Log.w("BootReceiver", "Keystore not ready", e)
+                return
+            }
+            BotState.isRunning = false
+            AppPrefs.isBotRunning = false
+        }
+    }
+
+    // ALSO fix AppPrefs.init() itself with a fallback:
+    fun init(context: Context) {
+        prefs = try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context, NAME, masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            Log.w("AppPrefs", "EncryptedSharedPreferences failed, using fallback", e)
+            context.getSharedPreferences(NAME + "_fb", Context.MODE_PRIVATE)
+        }
+    }
+
+================================================================================
+SECTION 2: HIGH SEVERITY BUGS
+================================================================================
+
+BUG-H01 [HIGH] Amazon Shopping app in ride app whitelist
+--------------------------------------------------------
+FILES:
+  RideAccessibilityService.kt (companion object TARGET_PACKAGES)
+  accessibility_service_config.xml (android:packageNames)
+
+"in.amazon.mShop.android.shopping" is Amazon Shopping, NOT a ride app.
+The service will scan Amazon unnecessarily, wasting battery and risking
+accidental clicks.
+
+FIX: Remove from BOTH files:
+    // RideAccessibilityService.kt:
+    val TARGET_PACKAGES = setOf(
+        "com.ubercab.driver",
+        "com.olacabs.provider",
+        "com.didi.global.passenger"
+        // REMOVE: "in.amazon.mShop.android.shopping"
+    )
+
+    // accessibility_service_config.xml:
+    android:packageNames="com.ubercab.driver,com.olacabs.provider,com.didi.global.passenger"
+
+--------------------------------------------------------------------------------
+
+BUG-H02 [HIGH] BootReceiver exported="true"
+-------------------------------------------
+FILE: AndroidManifest.xml
+
+BOOT_COMPLETED is only sent by the system. exported="true" is unnecessary
+and allows other apps to trigger the receiver.
+
+FIX:
+    <receiver
+        android:name=".BootReceiver"
+        android:enabled="true"
+        android:exported="false">
+
+--------------------------------------------------------------------------------
+
+BUG-H03 [HIGH] OnboardingActivity back-button infinite loop
+----------------------------------------------------------
+FILE: OnboardingActivity.kt
+
+When isOnboardingComplete=true and permissions are granted,
+updateStatus() auto-calls navigateToLogin() which calls finish().
+But if the user presses BACK from LoginActivity, they return to
+OnboardingActivity which immediately pushes them forward again.
+
+FIX: Add FLAG_ACTIVITY_CLEAR_TOP to prevent the loop:
+    private fun navigateToLogin() {
+        startActivity(Intent(this, LoginActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+        })
+        finish()
+    }
+
+    // Also in onCreate onboarding-complete path:
+    startActivity(Intent(this, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+    })
+
+--------------------------------------------------------------------------------
+
+BUG-H04 [HIGH] Client-side admin check is trivially bypassed
+------------------------------------------------------------
+FILE: AppPrefs.kt
+
+isAuthorizedAdmin() compares userEmail against a hardcoded string:
+    const val AUTHORIZED_ADMIN_EMAIL = "aalamdiwan555@gmail.com"
+
+Anyone with JADX/apktool can change this string to their own email and
+gain admin access.
+
+FIX: Verify admin server-side:
+    interface AdminApi {
+        @GET("admin/verify")
+        suspend fun verifyAdmin(@Header("Authorization") token: String): Response<AdminVerifyResponse>
+    }
+
+    // In AdminActivity.kt onCreate:
+    lifecycleScope.launch {
+        val response = adminApi.verifyAdmin("Bearer ${AppPrefs.authToken}")
+        if (!response.isSuccessful || response.body()?.isAdmin != true) {
+            Toast.makeText(this@AdminActivity, "Admin access denied", Toast.LENGTH_SHORT).show()
+            finish()
+            return@launch
+        }
+        // ... setup UI
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-H05 [HIGH] CI workflow cannot build — missing Android SDK
+-----------------------------------------------------------
+FILE: .github/workflows/build-apk.yml
+
+The workflow installs Java but NEVER installs the Android SDK.
+The gradle build will fail with "Android SDK not found".
+
+BROKEN:
+    - name: Install Gradle
+      run: |
+        curl ... gradle-8.2-bin.zip ...
+    - name: Build debug APK
+      run: /tmp/gradle-8.2/bin/gradle assembleDebug
+
+FIX:
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Cache Gradle
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+
+    - name: Build debug APK
+      run: ./gradlew assembleDebug --no-daemon
+
+--------------------------------------------------------------------------------
+
+BUG-H06 [HIGH] SignupActivity never sets authToken
+--------------------------------------------------
+FILE: SignupActivity.kt
+
+After signup, isLoggedIn=true and userEmail are set, but authToken is
+never stored. Any subsequent API call would fail authentication.
+
+FIX (when implementing real auth):
+    AppPrefs.authToken = response.body()?.token
+
+--------------------------------------------------------------------------------
+
+================================================================================
+SECTION 3: MEDIUM SEVERITY BUGS
+================================================================================
+
+BUG-M01 [MEDIUM] Admin reset button has no confirmation
+---------------------------------------------------------
+FILE: AdminActivity.kt
+
+btnResetSubscription immediately wipes subscription data without confirmation.
+One accidental tap = all subscription time gone.
+
+FIX:
+    binding.btnResetSubscription.setOnClickListener {
+        AlertDialog.Builder(this)
+            .setTitle("Reset Subscription?")
+            .setMessage("This will remove ALL active subscription time.")
+            .setPositiveButton("Reset") { _, _ ->
+                AppPrefs.subscriptionExpiry = 0
+                Toast.makeText(this, "Subscription reset", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-M02 [MEDIUM] Float precision for currency prices
+------------------------------------------------------
+FILE: AppPrefs.kt
+
+minPrice and maxPrice stored as Float (32-bit). Float cannot precisely
+represent many decimal values (e.g., 150.55f → 150.550003).
+
+FIX: Store as Long (paise/cents):
+    var minPrice: Double
+        get() = prefs.getLong("min_price_cents", 0) / 100.0
+        set(value) = prefs.edit().putLong("min_price_cents", (value * 100).toLong()).commit()
+
+    var maxPrice: Double
+        get() = prefs.getLong("max_price_cents", 9999900) / 100.0
+        set(value) = prefs.edit().putLong("max_price_cents", (value * 100).toLong()).commit()
+
+--------------------------------------------------------------------------------
+
+BUG-M03 [MEDIUM] commit() called on main thread for every write
+---------------------------------------------------------------
+FILE: AppPrefs.kt
+
+Every property setter calls commit() (synchronous disk I/O). Setting
+multiple properties in sequence causes frame drops.
+
+FIX: Batch writes with a single commit:
+    fun setLoginSession(token: String, email: String) {
+        prefs.edit().apply {
+            putBoolean("is_logged_in", true)
+            putString("auth_token", token)
+            putString("user_email", email)
+        }.commit()
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-M04 [MEDIUM] No input validation in auth screens
+----------------------------------------------------
+FILES: LoginActivity.kt, SignupActivity.kt
+
+- Email format not validated
+- Password minimum length not checked
+- Phone number not validated in signup
+
+FIX (LoginActivity.kt):
+    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+        Toast.makeText(this, "Invalid email format", Toast.LENGTH_SHORT).show()
+        return@setOnClickListener
+    }
+    if (password.length < 6) {
+        Toast.makeText(this, "Password must be at least 6 characters", Toast.LENGTH_SHORT).show()
+        return@setOnClickListener
+    }
+
+FIX (SignupActivity.kt):
+    if (phone.length !in 10..15 || !phone.all { it.isDigit() }) {
+        Toast.makeText(this, "Invalid phone number", Toast.LENGTH_SHORT).show()
+        return@setOnClickListener
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-M05 [MEDIUM] ForgotPasswordActivity does nothing real
+---------------------------------------------------------
+FILE: ForgotPasswordActivity.kt
+
+Still shows a fake toast. No actual password reset API.
+
+FIX: Either implement real API or disable the feature until backend ready:
+    // In LoginActivity.kt, hide the link:
+    // binding.tvForgotPassword.visibility = View.GONE
+
+--------------------------------------------------------------------------------
+
+BUG-M06 [MEDIUM] Hardcoded strings in ALL layout XMLs
+-----------------------------------------------------
+FILES: All activity_*.xml files
+
+Every layout has hardcoded English strings instead of @string references.
+Blocks localization.
+
+EXAMPLE (activity_main.xml):
+    android:text="Autopilot Dashboard"
+    android:text="Price Filter"
+    android:text="Daily +25"
+
+FIX: Move to strings.xml:
+    <string name="dashboard_title">Autopilot Dashboard</string>
+    <string name="price_filter">Price Filter</string>
+    <string name="daily_reward">Daily +25</string>
+
+Then in XML:
+    android:text="@string/dashboard_title"
+
+--------------------------------------------------------------------------------
+
+BUG-M07 [MEDIUM] traverse() obtains unnecessary copy of root
+-------------------------------------------------------------
+FILE: RideAccessibilityService.kt
+
+traverse() calls AccessibilityNodeInfo.obtain(root) even though the
+caller already has a valid root. Creates extra object overhead.
+
+FIX: Remove obtain() in traverse:
+    private fun traverse(root: AccessibilityNodeInfo, visitor: (AccessibilityNodeInfo) -> Unit) {
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)  // NOT: queue.add(AccessibilityNodeInfo.obtain(root))
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            try {
+                visitor(node)
+                for (i in 0 until node.childCount) {
+                    node.getChild(i)?.let(queue::add)
+                }
+            } finally {
+                node.recycle()
+            }
+        }
+    }
+
+    // Also remove root?.recycle() from onAccessibilityEvent's finally block
+    // since traverse now owns the lifecycle.
+
+--------------------------------------------------------------------------------
+
+BUG-M08 [MEDIUM] parseNumericValue() fragile for multiple dots
+---------------------------------------------------------------
+FILE: RideAccessibilityService.kt
+
+"1.5.0" becomes "150" which might be a valid European format for "1.50".
+
+FIX: Only apply dot-removal for Indian lakh patterns (7+ digits):
+    private fun parseNumericValue(raw: String): Double? {
+        val compact = raw.replace(",", "").replace(" ", "")
+        return if (compact.count { it == '.' } > 1 && compact.length >= 7) {
+            compact.replace(".", "").toDoubleOrNull()
+        } else {
+            compact.toDoubleOrNull()
+        }
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-M09 [MEDIUM] onInterrupt() permanently stops the bot
+--------------------------------------------------------
+FILE: RideAccessibilityService.kt
+
+onInterrupt() is called during phone calls or system interruptions.
+Current code permanently sets BotState.isRunning = false.
+
+FIX: Do NOT stop the bot on interrupt; just skip this scan:
+    override fun onInterrupt() {
+        scanInProgress.set(false)
+        // Do NOT call stopBotState()
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-M10 [MEDIUM] findPriceNearButton may parse the button itself
+----------------------------------------------------------------
+FILE: RideAccessibilityService.kt
+
+findPriceNearButton traverses the entire tree including the acceptButton.
+If button text is "Accept Rs 150", that number is parsed as price.
+If it contains other numbers (e.g., "Accept Ride #12345"), wrong value.
+
+FIX: Skip the acceptButton node:
+    traverse(root) { node ->
+        if (node === acceptButton) return@traverse
+        // ... parse price
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-M11 [MEDIUM] Missing maxLength on price EditTexts
+-----------------------------------------------------
+FILE: activity_main.xml
+
+etMinPrice and etMaxPrice have no maxLength. Long input causes parse errors.
+
+FIX:
+    <EditText
+        android:id="@+id/etMinPrice"
+        android:maxLength="7"
+        android:digits="0123456789."
+        ... />
+
+--------------------------------------------------------------------------------
+
+BUG-M12 [MEDIUM] AdManager.showInterstitial() still called on activity open
+---------------------------------------------------------------------------
+FILE: MainActivity.kt
+
+AdManager.showInterstitial(this) is called in onCreate. This violates
+most ad network policies (cannot show interstitial on app open).
+
+FIX: Remove the call from MainActivity.onCreate, or move it to after
+a user action (e.g., after tapping STOP).
+
+--------------------------------------------------------------------------------
+
+BUG-M13 [MEDIUM] CI workflow no dependency caching
+--------------------------------------------------
+FILE: .github/workflows/build-apk.yml
+
+Each CI run re-downloads all Gradle/Maven dependencies. ~10-15 min builds.
+
+FIX: Add cache step (see BUG-H05 fix above).
+
+--------------------------------------------------------------------------------
+
+BUG-M14 [MEDIUM] No certificate pinning on API calls
+----------------------------------------------------
+FILE: app/build.gradle.kts
+
+Retrofit/OkHttp configured but no certificate pinning. MITM possible.
+
+FIX:
+    val okHttpClient = OkHttpClient.Builder()
+        .certificatePinner(
+            CertificatePinner.Builder()
+                .add("your-api.com", "sha256/AAAA...")
+                .build()
+        )
+        .build()
+
+--------------------------------------------------------------------------------
+
+BUG-M15 [MEDIUM] No root detection
+----------------------------------
+FILES: All
+
+No root detection. On rooted devices, EncryptedSharedPreferences can be
+extracted because MasterKey is accessible.
+
+FIX: Add RootBeer library:
+    implementation("com.scottyab:rootbeer-lib:0.1.0")
+
+    // In MyApplication.onCreate():
+    if (RootBeer(context).isRooted) {
+        // Warn user or exit
+    }
+
+================================================================================
+SECTION 4: LOW SEVERITY BUGS
+================================================================================
+
+BUG-L01 [LOW] replit.md is irrelevant template
+-----------------------------------------------
+FILE: replit.md
+
+This is a Node.js/TypeScript/Express template. Has nothing to do with
+this Android app.
+
+FIX: Delete replit.md
+
+--------------------------------------------------------------------------------
+
+BUG-L02 [LOW] Missing contentDescription on interactive elements
+------------------------------------------------------------------
+FILES: All activity_*.xml
+
+Buttons and EditTexts have no contentDescription. Accessibility issue.
+
+FIX:
+    android:contentDescription="@string/login_button_desc"
+
+--------------------------------------------------------------------------------
+
+BUG-L03 [LOW] btnRedeemReward missing textColor
+-----------------------------------------------
+FILE: activity_main.xml
+
+btnClaimReward has textColor="@android:color/white" but btnRedeemReward
+does not. May be unreadable depending on background.
+
+FIX:
+    android:textColor="@android:color/white"
+
+--------------------------------------------------------------------------------
+
+BUG-L04 [LOW] Missing autofill hints on EditTexts
+-------------------------------------------------
+FILES: All activity_*.xml
+
+No android:autofillHints. Password managers cannot suggest credentials.
+
+FIX:
+    android:autofillHints="emailAddress"
+    android:importantForAutofill="yes"
+
+--------------------------------------------------------------------------------
+
+BUG-L05 [LOW] Missing ripple/feedback on buttons
+------------------------------------------------
+FILE: activity_main.xml
+
+btnToggleBot has no visual touch feedback.
+
+FIX:
+    android:foreground="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+
+--------------------------------------------------------------------------------
+
+BUG-L06 [LOW] Missing scrollbars in ScrollViews
+-----------------------------------------------
+FILES: activity_main.xml, possibly others
+
+ScrollView has no visible scrollbars.
+
+FIX:
+    android:scrollbars="vertical"
+    android:fadeScrollbars="false"
+
+--------------------------------------------------------------------------------
+
+BUG-L07 [LOW] themes.xml missing windowLightStatusBar
+-------------------------------------------------------
+FILE: themes.xml
+
+Status bar icons may be invisible on some devices.
+
+FIX:
+    <item name="android:windowLightStatusBar">false</item>
+
+--------------------------------------------------------------------------------
+
+BUG-L08 [LOW] Log.e() in production code
+----------------------------------------
+FILE: RideAccessibilityService.kt
+
+CoroutineExceptionHandler uses Log.e() which other apps can read.
+
+FIX: Use a crash reporting service instead:
+    private val exceptionHandler = CoroutineExceptionHandler { _, t ->
+        FirebaseCrashlytics.getInstance().recordException(t)
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-L09 [LOW] AdminActivity binding init order
+---------------------------------------------
+FILE: AdminActivity.kt
+
+Binding is initialized AFTER the admin check. While finish() prevents
+onResume from accessing it, best practice is to init binding first.
+
+FIX:
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityAdminBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        if (!AppPrefs.isAuthorizedAdmin()) {
+            Toast.makeText(this, "Admin access denied", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+        // ... rest of setup
+    }
+
+--------------------------------------------------------------------------------
+
+BUG-L10 [LOW] Missing @Keep annotations for ProGuard
+-----------------------------------------------------
+FILE: proguard-rules.pro
+
+The proguard rules use -keep, but Kotlin data classes for Retrofit should
+also use @Keep annotation for extra safety.
+
+FIX:
+    @Keep
+    data class LoginResponse(val token: String, val email: String)
+
+================================================================================
+SECTION 5: SECURITY AUDIT
+================================================================================
+
+SECR-01 [CRITICAL] Client-side admin bypass
+-------------------------------------------
+(See BUG-H04)
+
+SECR-02 [HIGH] Predictable auth token
+--------------------------------------
+FILE: LoginActivity.kt
+
+Token = "token_${System.currentTimeMillis()}" is predictable and useless.
+
+FIX: Server must generate cryptographically random tokens.
+
+SECR-03 [MEDIUM] No certificate pinning
+---------------------------------------
+(See BUG-M14)
+
+SECR-04 [MEDIUM] No root detection
+----------------------------------
+(See BUG-M15)
+
+SECR-05 [LOW] Log.e() exposes error details
+--------------------------------------------
+(See BUG-L08)
+
+================================================================================
+SECTION 6: BUILD / CI ISSUES
+================================================================================
+
+BUILD-01 [CRITICAL] CI workflow missing Android SDK
+---------------------------------------------------
+(See BUG-H05)
+
+BUILD-02 [MEDIUM] CI uses raw gradle instead of wrapper
+-------------------------------------------------------
+FILE: .github/workflows/build-apk.yml
+
+Should use ./gradlew to ensure correct Gradle version.
+
+FIX:
+    - name: Build debug APK
+      run: ./gradlew assembleDebug --no-daemon
+
+BUILD-03 [MEDIUM] No dependency caching
+---------------------------------------
+(See BUG-M13)
+
+BUILD-04 [LOW] compileSdk 34 may not be pre-installed
+----------------------------------------------------
+FILE: app/build.gradle.kts
+
+GitHub Actions runners may need to download API 34.
+
+FIX: Acceptable — Gradle handles this automatically.
+
+================================================================================
+SECTION 7: WHAT THE DEVELOPER ALREADY FIXED (Good Work!)
+================================================================================
+
+These bugs from the first audit are now FIXED in the current codebase:
+
+FIXED: normalizeDigits() preserves non-digit characters
+FIXED: Null price now rejected (price == null → skip)
+FIXED: accessibility_service_config.xml exists
+FIXED: Package filtering added
+FIXED: Debounce race condition fixed
+FIXED: CoroutineExceptionHandler added
+FIXED: Dispatchers.Default for scanning
+FIXED: scanInProgress reset in onServiceConnected
+FIXED: Screen-off check added
+FIXED: Best-match scoring for accept button
+FIXED: Gesture fallback added
+FIXED: notificationTimeout = 300ms
+FIXED: TYPE_VIEW_CLICKED removed
+FIXED: Proximity-based price finding
+FIXED: AppPrefs init guard
+FIXED: Exact-match accessibility check
+FIXED: BotState sync from prefs
+FIXED: Logout stops bot
+FIXED: Overlay check in startBot()
+FIXED: Ad consent check added
+FIXED: EncryptedSharedPreferences added
+FIXED: commit() for critical writes
+FIXED: Atomic reward points
+FIXED: Duplicate keywords removed
+FIXED: Price regex fixed
+FIXED: Earn keywords added
+FIXED: Admin onResume check added
+FIXED: Onboarding auto-navigate
+FIXED: usesCleartextTraffic removed
+FIXED: allowBackup = false
+FIXED: BootReceiver resets state
+FIXED: BuildConfig.STARTAPP_ID used
+FIXED: minifyEnabled + shrinkResources enabled
+FIXED: Proguard rules added
+
+================================================================================
+SECTION 8: PRIORITY FIX ORDER
+================================================================================
+
+P0 — CRITICAL (Do these FIRST):
+  1. BUG-C01  exported="true" on accessibility service
+  2. BUG-C02  Fake authentication → implement real API
+  3. BUG-C03  Missing canPerformGestures
+  4. BUG-C04  EncryptedSharedPreferences crash risk
+  5. SECR-01  Client-side admin bypass
+
+P1 — HIGH:
+  6. BUG-H01  Amazon in ride whitelist
+  7. BUG-H02  BootReceiver exported
+  8. BUG-H03  Onboarding back-button loop
+  9. BUG-H05  CI workflow broken
+  10. BUG-H06 Signup missing authToken
+
+P2 — MEDIUM:
+  11. BUG-M01  Admin reset no confirmation
+  12. BUG-M02  Float precision
+  13. BUG-M03  commit() on main thread
+  14. BUG-M04  No input validation
+  15. BUG-M05  Fake forgot password
+  16. BUG-M06  Hardcoded strings
+  17. BUG-M07  traverse() obtain overhead
+  18. BUG-M08  parseNumericValue fragile
+  19. BUG-M09  onInterrupt too aggressive
+  20. BUG-M10  Button parses own text
+  21. BUG-M11  Missing maxLength
+  22. BUG-M12  Ad on activity open
+  23. BUG-M13  CI no caching
+  24. BUG-M14  No cert pinning
+  25. BUG-M15  No root detection
+
+P3 — LOW:
+  26. BUG-L01  Delete replit.md
+  27. BUG-L02  Missing contentDescription
+  28. BUG-L03  Missing textColor
+  29. BUG-L04  Missing autofill
+  30. BUG-L05  Missing ripple
+  31. BUG-L06  Missing scrollbars
+  32. BUG-L07  windowLightStatusBar
+  33. BUG-L08  Log.e() in production
+  34. BUG-L09  Admin binding order
+  35. BUG-L10  Missing @Keep
+
+================================================================================
+END OF REPORT
+================================================================================
