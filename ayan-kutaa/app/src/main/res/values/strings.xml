@@ -42,4 +42,7 @@
     <string name="add_subscription_days">Add Subscription Days</string>
     <string name="reset_subscription">Reset Subscription</string>
     <string name="back">Back</string>
+    <string name="watch_rewarded_ad">Watch ad for subscription</string>
+    <string name="watch_rewarded_ad_progress">Watch ad for subscription (%1$d/10)</string>
+    <string name="watch_rewarded_ad_description">Watch a complete rewarded ad to earn subscription progress</string>
 </resources>

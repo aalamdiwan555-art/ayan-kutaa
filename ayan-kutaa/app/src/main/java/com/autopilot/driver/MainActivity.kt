@@ -78,6 +78,23 @@ class MainActivity : AppCompatActivity() {
             updateRewardsUI()
         }
 
+        binding.btnWatchRewardedAd.setOnClickListener {
+            binding.btnWatchRewardedAd.isEnabled = false
+            AdManager.showRewardedAd(this) { completed, subscriptionGranted ->
+                runOnUiThread {
+                    binding.btnWatchRewardedAd.isEnabled = true
+                    if (!completed) {
+                        Toast.makeText(this, "Rewarded ad is not ready. Please try again.", Toast.LENGTH_SHORT).show()
+                    } else if (subscriptionGranted) {
+                        Toast.makeText(this, "10 rewarded ads complete: 1 subscription day added", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this, "Rewarded ad completed. ${AppPrefs.rewardedAdsWatched}/10 watched.", Toast.LENGTH_SHORT).show()
+                    }
+                    updateSubscriptionUI()
+                }
+            }
+        }
+
         binding.btnAdmin.setOnClickListener {
             startActivity(Intent(this, AdminActivity::class.java))
         }
@@ -154,6 +171,10 @@ class MainActivity : AppCompatActivity() {
     private fun updateRewardsUI() {
         binding.tvRewards.text = "Rewards: ${AppPrefs.rewardPoints} points"
         binding.btnRedeemReward.isEnabled = AppPrefs.rewardPoints >= 100
+        binding.btnWatchRewardedAd.text = getString(
+            R.string.watch_rewarded_ad_progress,
+            AppPrefs.rewardedAdsWatched
+        )
     }
 
     private fun isAccessibilityEnabled(): Boolean {

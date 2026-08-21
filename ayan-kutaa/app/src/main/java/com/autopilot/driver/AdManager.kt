@@ -13,8 +13,11 @@ import java.util.concurrent.TimeUnit
 object AdManager {
     private const val MIN_INTERVAL_MS = 5 * 60 * 1000L
     private const val MAX_PER_DAY = 3
+    private const val REWARDED_COOLDOWN_MS = 30 * 1000L
     private var initialized = false
     private var ready = false
+    private var rewardedInProgress = false
+    private var lastRewardedAt = 0L
 
     fun init(app: Application) {
         if (initialized) return
@@ -74,5 +77,52 @@ object AdManager {
                 state: UnityAdsShowCompletionState?
             ) = Unit
         }
+    }
+
+    fun showRewardedAd(
+        activity: Activity,
+        onResult: (completed: Boolean, subscriptionGranted: Boolean) -> Unit
+    ) {
+        if (!initialized || !ready || !AppPrefs.isAdConsentGranted || activity.isFinishing) {
+            onResult(false, false)
+            return
+        }
+        val now = System.currentTimeMillis()
+        if (rewardedInProgress || now - lastRewardedAt < REWARDED_COOLDOWN_MS ||
+            !UnityAds.isReady(BuildConfig.UNITY_REWARDED_AD_UNIT)
+        ) {
+            onResult(false, false)
+            return
+        }
+
+        rewardedInProgress = true
+        UnityAds.show(activity, BuildConfig.UNITY_REWARDED_AD_UNIT, object : IUnityAdsShowListener {
+            override fun onUnityAdsShowFailure(
+                placementId: String?,
+                error: UnityAdsShowError?,
+                message: String?
+            ) {
+                rewardedInProgress = false
+                onResult(false, false)
+            }
+
+            override fun onUnityAdsShowStart(placementId: String?) {
+                lastRewardedAt = System.currentTimeMillis()
+            }
+
+            override fun onUnityAdsShowClick(placementId: String?) = Unit
+
+            override fun onUnityAdsShowComplete(
+                placementId: String?,
+                state: UnityAdsShowCompletionState?
+            ) {
+                rewardedInProgress = false
+                onResult(
+                    state == UnityAdsShowCompletionState.COMPLETED,
+                    state == UnityAdsShowCompletionState.COMPLETED &&
+                        AppPrefs.recordRewardedAdCompletion()
+                )
+            }
+        })
     }
 }

@@ -15,6 +15,7 @@ android {
         versionName = "1.0"
         buildConfigField("String", "UNITY_GAME_ID", "\"6178982\"")
         buildConfigField("String", "UNITY_INTERSTITIAL_AD_UNIT", "\"Interstitial_Android\"")
+        buildConfigField("String", "UNITY_REWARDED_AD_UNIT", "\"Rewarded_Android\"")
         buildConfigField(
             "String",
             "API_BASE_URL",

@@ -78,6 +78,17 @@
                      android:contentDescription="@string/redeem_reward_description"
                     android:background="@drawable/bg_button_secondary" />
             </LinearLayout>
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/btnWatchRewardedAd"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="@string/watch_rewarded_ad"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:contentDescription="@string/watch_rewarded_ad_description"
+                    android:background="@drawable/bg_button_primary"
+                    android:layout_marginTop="12dp" />
         </LinearLayout>
 
         <LinearLayout

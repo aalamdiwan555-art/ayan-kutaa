@@ -130,6 +130,27 @@ object AppPrefs {
             prefs.edit().putInt("interstitials_today", value.coerceAtLeast(0)).apply()
         }
 
+    var rewardedAdsWatched: Int
+        get() = prefs.getInt("rewarded_ads_watched", 0)
+        set(value) {
+            prefs.edit().putInt("rewarded_ads_watched", value.coerceIn(0, REWARDED_ADS_REQUIRED - 1)).apply()
+        }
+
+    fun recordRewardedAdCompletion(): Boolean {
+        val nextCount = rewardedAdsWatched + 1
+        return if (nextCount >= REWARDED_ADS_REQUIRED) {
+            val now = System.currentTimeMillis()
+            prefs.edit()
+                .putInt("rewarded_ads_watched", 0)
+                .putLong("subscription_expiry", maxOf(subscriptionExpiry, now) + TimeUnit.DAYS.toMillis(1))
+                .commit()
+            true
+        } else {
+            prefs.edit().putInt("rewarded_ads_watched", nextCount).commit()
+            false
+        }
+    }
+
     fun isAuthorizedAdmin(): Boolean {
         // The admin claim must come from a trusted authentication response.
         // Never grant admin access based on a client-editable email address.
@@ -172,4 +193,5 @@ object AppPrefs {
     fun isInitialized(): Boolean = ::prefs.isInitialized
 
     private const val TAG = "AppPrefs"
+    private const val REWARDED_ADS_REQUIRED = 10
 }
