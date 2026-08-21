@@ -5,7 +5,12 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 class RideAccessibilityService : AccessibilityService() {
@@ -13,6 +18,8 @@ class RideAccessibilityService : AccessibilityService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val acceptKeywords = OcrKeywords.ACCEPT_KEYWORDS
     private val pricePatterns = OcrKeywords.PRICE_PATTERNS
+    private val scanInProgress = AtomicBoolean(false)
+    private val lastScanAt = AtomicLong(0L)
     private val lastClickAt = AtomicLong(0L)
 
     override fun onServiceConnected() {
@@ -29,104 +36,136 @@ class RideAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        if (!BotState.isRunning || !AppPrefs.isLoggedIn || !AppPrefs.hasActiveSubscription()) return
-        if (System.currentTimeMillis() - lastClickAt.get() < 750L) return
+        if (!AppPrefs.isLoggedIn || !BotState.isRunning || !AppPrefs.hasActiveSubscription()) {
+            stopBotState()
+            return
+        }
 
-        val rootNode = rootInActiveWindow ?: return
-        serviceScope.launch(Dispatchers.Default) {
+        val now = System.currentTimeMillis()
+        if (now - lastScanAt.get() < SCAN_DEBOUNCE_MS ||
+            !scanInProgress.compareAndSet(false, true)
+        ) return
+        lastScanAt.set(now)
+
+        serviceScope.launch {
+            val root = rootInActiveWindow
             try {
-                scanAndAccept(rootNode)
+                if (root != null) scanAndAccept(root)
             } finally {
-                rootNode.recycle()
+                root?.recycle()
+                scanInProgress.set(false)
             }
         }
     }
 
     private fun scanAndAccept(root: AccessibilityNodeInfo) {
-        val acceptButtons = findAcceptButtons(root)
-        if (acceptButtons.isEmpty()) return
+        val acceptButton = findAcceptButton(root) ?: return
+        try {
+            val price = findPriceOnScreen(root)
+            val minPrice = AppPrefs.minPrice
+            val maxPrice = AppPrefs.maxPrice
+            if (price != null && (price < minPrice || price > maxPrice)) return
 
-        val price = findPriceOnScreen(root)
-        val minPrice = AppPrefs.minPrice
-        val maxPrice = AppPrefs.maxPrice
+            val now = System.currentTimeMillis()
+            if (now - lastClickAt.get() < CLICK_DEBOUNCE_MS) return
+            lastClickAt.set(now)
 
-        if (price != null) {
-            if (price < minPrice || price > maxPrice) {
-                for (btn in acceptButtons) btn.recycle()
-                return
+            val clicked = runCatching {
+                acceptButton.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }.getOrDefault(false)
+            if (clicked) {
+                AppPrefs.addRewardPoints(10)
+                Toast.makeText(
+                    this,
+                    "Ride accepted! ₹$price (+10 points)",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
-        }
-
-        for (btn in acceptButtons) {
-            serviceScope.launch(Dispatchers.Main) {
-                if (lastClickAt.compareAndSet(lastClickAt.get(), System.currentTimeMillis())) {
-                    val clicked = btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    if (clicked) {
-                        AppPrefs.addRewardPoints(10)
-                        Toast.makeText(
-                            this@RideAccessibilityService,
-                            "Ride accepted! ₹$price (+10 points)",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-            }
-            btn.recycle()
+        } finally {
+            acceptButton.recycle()
         }
     }
 
-    private fun findAcceptButtons(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
-        val results = mutableListOf<AccessibilityNodeInfo>()
-        val queue = ArrayDeque<AccessibilityNodeInfo>()
-        queue.add(root)
-
-        while (queue.isNotEmpty()) {
-            val node = queue.removeFirst()
-            if (node.isClickable) {
-                val text = (node.text?.toString() ?: "") +
-                        (node.contentDescription?.toString() ?: "")
-                if (acceptKeywords.any { text.contains(it, ignoreCase = true) }) {
-                    results.add(AccessibilityNodeInfo.obtain(node))
-                }
-            }
-            for (i in 0 until node.childCount) {
-                node.getChild(i)?.let { queue.add(it) }
+    private fun findAcceptButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        var result: AccessibilityNodeInfo? = null
+        traverse(root) { node ->
+            if (result == null && node.isClickable && acceptKeywords.any { keyword ->
+                    node.nodeText().contains(keyword, ignoreCase = true)
+                }) {
+                result = AccessibilityNodeInfo.obtain(node)
             }
         }
-        return results
+        return result
     }
 
     private fun findPriceOnScreen(root: AccessibilityNodeInfo): Double? {
-        val queue = ArrayDeque<AccessibilityNodeInfo>()
-        queue.add(root)
         var bestPrice: Double? = null
-
-        while (queue.isNotEmpty()) {
-            val node = queue.removeFirst()
-            val text = node.text?.toString() ?: ""
-
+        traverse(root) { node ->
+            val text = node.nodeText().normalizeDigits()
             for (pattern in pricePatterns) {
-                val match = pattern.find(text)
-                if (match != null) {
-                    val raw = match.groupValues[1].replace(",", "")
-                    val value = raw.toDoubleOrNull() ?: continue
-                    if (bestPrice == null || value > bestPrice) {
-                        bestPrice = value
-                    }
-                }
-            }
-
-            for (i in 0 until node.childCount) {
-                node.getChild(i)?.let { queue.add(it) }
+                val match = pattern.find(text) ?: continue
+                val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: continue
+                val value = raw.toDoubleOrNull() ?: continue
+                if (bestPrice == null || value > bestPrice!!) bestPrice = value
             }
         }
         return bestPrice
     }
 
-    override fun onInterrupt() {}
+    private fun traverse(root: AccessibilityNodeInfo, visitor: (AccessibilityNodeInfo) -> Unit) {
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(AccessibilityNodeInfo.obtain(root))
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            try {
+                visitor(node)
+                val childCount = runCatching { node.childCount }.getOrDefault(0)
+                for (index in 0 until childCount) {
+                    runCatching { node.getChild(index) }.getOrNull()?.let(queue::add)
+                }
+            } finally {
+                node.recycle()
+            }
+        }
+    }
+
+    private fun AccessibilityNodeInfo.nodeText(): String {
+        val text = runCatching { text?.toString() }.getOrNull().orEmpty()
+        val description = runCatching { contentDescription?.toString() }.getOrNull().orEmpty()
+        return "$text $description".trim()
+    }
+
+    private fun String.normalizeDigits(): String = buildString(length) {
+        for (character in this@normalizeDigits) {
+            append(
+                when (character) {
+                    in '\u0966'..'\u096F' -> character - '\u0966' + '0'.code
+                    in '\u0660'..'\u0669' -> character - '\u0660' + '0'.code
+                    in '\u06F0'..'\u06F9' -> character - '\u06F0' + '0'.code
+                    else -> character.code
+                }.toChar()
+            )
+        }
+    }
+
+    private fun stopBotState() {
+        BotState.isRunning = false
+        AppPrefs.isBotRunning = false
+    }
+
+    override fun onInterrupt() {
+        stopBotState()
+        scanInProgress.set(false)
+    }
 
     override fun onDestroy() {
-        super.onDestroy()
+        stopBotState()
         serviceScope.cancel()
+        super.onDestroy()
+    }
+
+    private companion object {
+        const val SCAN_DEBOUNCE_MS = 300L
+        const val CLICK_DEBOUNCE_MS = 750L
     }
 }
