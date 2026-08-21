@@ -4,24 +4,31 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import android.util.Log
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToLong
 
 object AppPrefs {
-    const val AUTHORIZED_ADMIN_EMAIL = "aalamdiwan555@gmail.com"
     private lateinit var prefs: SharedPreferences
     private const val NAME = "autopilot_secure_prefs"
 
     fun init(context: Context) {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        prefs = EncryptedSharedPreferences.create(
-            context,
-            NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        if (::prefs.isInitialized) return
+        prefs = try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context,
+                NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (exception: Exception) {
+            Log.w(TAG, "Encrypted preferences unavailable; using protected fallback", exception)
+            context.getSharedPreferences("${NAME}_fallback", Context.MODE_PRIVATE)
+        }
     }
 
     var isLoggedIn: Boolean
@@ -51,13 +58,13 @@ object AppPrefs {
     var minPrice: Double
         get() = prefs.getLong("min_price_cents", 0L) / 100.0
         set(value) {
-            prefs.edit().putLong("min_price_cents", (value.coerceAtLeast(0.0) * 100).toLong()).apply()
+            prefs.edit().putLong("min_price_cents", (value.coerceAtLeast(0.0) * 100).roundToLong()).apply()
         }
 
     var maxPrice: Double
         get() = prefs.getLong("max_price_cents", 9_999_900L) / 100.0
         set(value) {
-            prefs.edit().putLong("max_price_cents", (value.coerceAtLeast(0.0) * 100).toLong()).apply()
+            prefs.edit().putLong("max_price_cents", (value.coerceAtLeast(0.0) * 100).roundToLong()).apply()
         }
 
     var isBotRunning: Boolean
@@ -91,7 +98,9 @@ object AppPrefs {
         }
 
     fun isAuthorizedAdmin(): Boolean {
-        return isLoggedIn && userEmail?.trim()?.equals(AUTHORIZED_ADMIN_EMAIL, ignoreCase = true) == true
+        // The admin claim must come from a trusted authentication response.
+        // Never grant admin access based on a client-editable email address.
+        return isLoggedIn && prefs.getBoolean("is_admin", false)
     }
 
     fun addRewardPoints(points: Int) {
@@ -128,4 +137,6 @@ object AppPrefs {
     }
 
     fun isInitialized(): Boolean = ::prefs.isInitialized
+
+    private const val TAG = "AppPrefs"
 }

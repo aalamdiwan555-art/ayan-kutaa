@@ -9,7 +9,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Admin Panel"
+         android:text="@string/admin_panel"
         android:textSize="24sp"
         android:textStyle="bold"
         android:textColor="@color/primary"
@@ -19,7 +19,7 @@
         android:id="@+id/etDays"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:hint="Days to add"
+         android:hint="@string/days_to_add"
         android:inputType="number"
         android:paddingHorizontal="16dp"
         android:background="@drawable/bg_input"
@@ -29,7 +29,8 @@
         android:id="@+id/btnAddSubscription"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:text="Add Subscription Days"
+         android:text="@string/add_subscription_days"
+         android:contentDescription="@string/add_subscription_days"
         android:textColor="@android:color/white"
         android:textAllCaps="false"
         android:background="@drawable/bg_button_primary"
@@ -39,7 +40,8 @@
         android:id="@+id/btnResetSubscription"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:text="Reset Subscription"
+         android:text="@string/reset_subscription"
+         android:contentDescription="@string/reset_subscription"
         android:textAllCaps="false"
         android:background="@drawable/bg_button_secondary"
         android:layout_marginBottom="24dp" />
@@ -48,7 +50,7 @@
         android:id="@+id/btnBack"
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android:text="Back"
+         android:text="@string/back"
         android:textAllCaps="false"
         android:background="@drawable/bg_button_secondary" />
 

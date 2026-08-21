@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong
 class RideAccessibilityService : AccessibilityService() {
 
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
-        Log.e(TAG, "Accessibility scan failed", throwable)
+        Log.w(TAG, "Accessibility scan failed", throwable)
         scanInProgress.set(false)
     }
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob() + exceptionHandler)
@@ -132,8 +132,11 @@ class RideAccessibilityService : AccessibilityService() {
                 (buttonBounds.centerX() - bounds.centerX()).toDouble(),
                 (buttonBounds.centerY() - bounds.centerY()).toDouble()
             )
-            if (node !== button && distance <= PRICE_PROXIMITY_PX) {
-                parsePrice(node.nodeText())?.let { value ->
+            val nodeText = node.nodeText()
+            // The button can contain a price in labels such as "Accept ₹150".
+            // Only inspect nearby nodes with different content.
+            if (nodeText != button.nodeText() && distance <= PRICE_PROXIMITY_PX) {
+                parsePrice(nodeText)?.let { value ->
                     if (bestPrice == null || distance < bestPrice!!.second) {
                         bestPrice = value to distance
                     }

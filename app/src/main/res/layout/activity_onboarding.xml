@@ -10,7 +10,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Welcome to Autopilot"
+         android:text="@string/welcome"
         android:textSize="28sp"
         android:textStyle="bold"
         android:textColor="@color/primary"
@@ -19,7 +19,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Grant required permissions to continue"
+         android:text="@string/permissions_continue"
         android:textSize="14sp"
         android:textColor="@color/gray"
         android:layout_marginBottom="32dp" />
@@ -36,7 +36,7 @@
             android:id="@+id/tvAccessibilityStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Accessibility Required"
+             android:text="@string/accessibility_required"
             android:textColor="@android:color/holo_red_dark"
             android:textSize="16sp"
             android:layout_marginBottom="8dp" />
@@ -45,7 +45,8 @@
             android:id="@+id/btnGrantAccessibility"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:text="Grant Accessibility"
+             android:text="@string/grant_accessibility"
+             android:contentDescription="@string/grant_accessibility"
             android:textAllCaps="false"
             android:background="@drawable/bg_button_secondary" />
     </LinearLayout>
@@ -62,7 +63,7 @@
             android:id="@+id/tvOverlayStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Overlay Required"
+             android:text="@string/overlay_required"
             android:textColor="@android:color/holo_red_dark"
             android:textSize="16sp"
             android:layout_marginBottom="8dp" />
@@ -71,7 +72,8 @@
             android:id="@+id/btnGrantOverlay"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:text="Grant Overlay"
+             android:text="@string/grant_overlay"
+             android:contentDescription="@string/grant_overlay"
             android:textAllCaps="false"
             android:background="@drawable/bg_button_secondary" />
     </LinearLayout>
@@ -80,7 +82,8 @@
         android:id="@+id/btnContinue"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:text="Continue"
+         android:text="@string/continue_label"
+         android:contentDescription="@string/continue_label"
         android:textColor="@android:color/white"
         android:textAllCaps="false"
         android:textSize="16sp"

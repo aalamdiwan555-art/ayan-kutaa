@@ -5,7 +5,7 @@ import android.app.Application
 class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        AppPrefs.init(this)
+        runCatching { AppPrefs.init(this) }
         AdManager.init(this)
     }
 }
