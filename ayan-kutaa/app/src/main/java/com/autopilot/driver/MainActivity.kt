@@ -124,6 +124,7 @@ class MainActivity : AppCompatActivity() {
         AppPrefs.isBotRunning = false
         Toast.makeText(this, "Auto-Accepter STOPPED", Toast.LENGTH_SHORT).show()
         updateBotUI()
+        AdManager.showAfterUserAction(this)
     }
 
     private fun updateBotUI() {

@@ -112,6 +112,24 @@ object AppPrefs {
             prefs.edit().putBoolean("ad_consent_granted", value).commit()
         }
 
+    var lastInterstitialAt: Long
+        get() = prefs.getLong("last_interstitial_at", 0L)
+        set(value) {
+            prefs.edit().putLong("last_interstitial_at", value).apply()
+        }
+
+    var interstitialDay: Long
+        get() = prefs.getLong("interstitial_day", 0L)
+        set(value) {
+            prefs.edit().putLong("interstitial_day", value).apply()
+        }
+
+    var interstitialsToday: Int
+        get() = prefs.getInt("interstitials_today", 0)
+        set(value) {
+            prefs.edit().putInt("interstitials_today", value.coerceAtLeast(0)).apply()
+        }
+
     fun isAuthorizedAdmin(): Boolean {
         // The admin claim must come from a trusted authentication response.
         // Never grant admin access based on a client-editable email address.
