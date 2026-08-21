@@ -24,9 +24,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle caching
-        uses: gradle/actions/setup-gradle@v4
-
       - name: Install Gradle
         run: |
           curl --fail --location --retry 3 \
