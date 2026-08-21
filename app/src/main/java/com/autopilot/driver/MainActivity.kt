@@ -9,6 +9,7 @@ import android.widget.Toast
 import android.view.accessibility.AccessibilityManager
 import android.accessibilityservice.AccessibilityServiceInfo
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import com.autopilot.driver.databinding.ActivityMainBinding
 import java.text.SimpleDateFormat
@@ -29,6 +30,7 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null) {
             BotState.isRunning = AppPrefs.isBotRunning && AppPrefs.hasActiveSubscription()
         }
+        maybeAskAdConsent()
 
         binding.etMinPrice.setText(AppPrefs.minPrice.toString())
         binding.etMaxPrice.setText(AppPrefs.maxPrice.toString())
@@ -70,6 +72,7 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Daily reward already claimed", Toast.LENGTH_SHORT).show()
             }
             updateRewardsUI()
+            AdManager.showInterstitialIfAllowed(this)
         }
 
         binding.btnRedeemReward.setOnClickListener {
@@ -157,6 +160,26 @@ class MainActivity : AppCompatActivity() {
     private fun updateRewardsUI() {
         binding.tvRewards.text = "Rewards: ${AppPrefs.rewardPoints} points"
         binding.btnRedeemReward.isEnabled = AppPrefs.rewardPoints >= 100
+    }
+
+    private fun maybeAskAdConsent() {
+        if (AppPrefs.isAdConsentDecided) return
+        AlertDialog.Builder(this)
+            .setTitle("Support Autopilot")
+            .setMessage("Would you like to allow occasional ads? Ads help keep the app available, and you can continue using Autopilot either way.")
+            .setPositiveButton("Allow ads") { _, _ ->
+                AppPrefs.isAdConsentGranted = true
+                AppPrefs.isAdConsentDecided = true
+            }
+            .setNegativeButton("No thanks") { _, _ ->
+                AppPrefs.isAdConsentGranted = false
+                AppPrefs.isAdConsentDecided = true
+            }
+            .setOnCancelListener {
+                AppPrefs.isAdConsentGranted = false
+                AppPrefs.isAdConsentDecided = true
+            }
+            .show()
     }
 
     private fun isAccessibilityEnabled(): Boolean {

@@ -4,7 +4,7 @@ object OcrKeywords {
     val ACCEPT_KEYWORDS = listOf(
         // English
         "accept", "accept ride", "accept now", "new ride", "tap to accept",
-        "accept trip", "confirm", "take ride", "earn", "earnings", "you will earn", "estimated fare",
+        "accept trip", "confirm", "take ride",
 
         // Hindi
         "स्वीकार करें", "स्वीकार करे", "स्वीकार", "राइड स्वीकार करें", "नई राइड", "स्वीकारें",

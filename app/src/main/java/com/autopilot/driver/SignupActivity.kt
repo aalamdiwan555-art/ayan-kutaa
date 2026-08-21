@@ -24,6 +24,10 @@ class SignupActivity : AppCompatActivity() {
                 Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            if (name.length < 2) {
+                Toast.makeText(this, "Enter your full name", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
                 Toast.makeText(this, "Invalid email format", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -43,6 +47,8 @@ class SignupActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             AppPrefs.isLoggedIn = true
+            AppPrefs.isOnboardingComplete = true
+            binding.btnSignup.isEnabled = false
             startActivity(Intent(this, MainActivity::class.java))
             finishAffinity()
         }

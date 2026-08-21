@@ -113,6 +113,18 @@ object AppPrefs {
             prefs.edit().putBoolean("ad_consent_granted", value).commit()
         }
 
+    var isAdConsentDecided: Boolean
+        get() = prefs.getBoolean("ad_consent_decided", false)
+        set(value) {
+            prefs.edit().putBoolean("ad_consent_decided", value).apply()
+        }
+
+    var lastAdShownAt: Long
+        get() = prefs.getLong("last_ad_shown_at", 0L)
+        set(value) {
+            prefs.edit().putLong("last_ad_shown_at", value).apply()
+        }
+
     fun isAuthorizedAdmin(): Boolean {
         // The admin claim must come from a trusted authentication response.
         // Never grant admin access based on a client-editable email address.
@@ -151,6 +163,8 @@ object AppPrefs {
             .apply()
         return true
     }
+
+    fun hasLocalAccount(): Boolean = prefs.contains("password_hash") && !userEmail.isNullOrBlank()
 
     private fun hashPassword(password: String, salt: ByteArray): String {
         val spec = PBEKeySpec(password.toCharArray(), salt, PASSWORD_ITERATIONS, PASSWORD_KEY_BITS)

@@ -12,6 +12,7 @@ class ForgotPasswordActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityForgotPasswordBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.etEmail.setText(AppPrefs.userEmail.orEmpty())
 
         binding.btnReset.setOnClickListener {
             val email = binding.etEmail.text.toString().trim()
@@ -29,6 +30,7 @@ class ForgotPasswordActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             if (AppPrefs.resetPassword(email, password)) {
+                AppPrefs.isLoggedIn = false
                 Toast.makeText(this, "Password updated. You can log in now.", Toast.LENGTH_LONG).show()
                 finish()
             } else {

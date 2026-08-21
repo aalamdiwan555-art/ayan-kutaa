@@ -13,6 +13,7 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.etEmail.setText(AppPrefs.userEmail.orEmpty())
 
         binding.btnLogin.setOnClickListener {
             val email = binding.etEmail.text.toString().trim()
@@ -36,6 +37,7 @@ class LoginActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             AppPrefs.isLoggedIn = true
+            binding.btnLogin.isEnabled = false
             startActivity(Intent(this, MainActivity::class.java))
             finish()
         }

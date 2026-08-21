@@ -24,6 +24,9 @@
     <string name="forgot_password">Forgot Password?</string>
     <string name="signup_prompt">Don\'t have an account? Sign up</string>
     <string name="create_account">Create Account</string>
+    <string name="login_subtitle">Your rides, accepted with confidence.</string>
+    <string name="signup_subtitle">Set up your driver workspace in a minute.</string>
+    <string name="reset_subtitle">Choose a new password for this device.</string>
     <string name="full_name">Full Name</string>
     <string name="phone_number">Phone Number</string>
     <string name="sign_up">Sign Up</string>
