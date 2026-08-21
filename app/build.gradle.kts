@@ -1,6 +1,6 @@
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    id("com.android.application") version "8.3.2" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.24" apply false
 }
 
 android {
@@ -13,7 +13,6 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-        // Keep the advertising identifier in build configuration, not application code.
         buildConfigField("String", "STARTAPP_ID", "\"207133232\"")
     }
 
