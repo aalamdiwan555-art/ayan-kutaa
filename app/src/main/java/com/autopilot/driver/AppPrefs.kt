@@ -2,8 +2,10 @@ package com.autopilot.driver
 
 import android.content.Context
 import android.content.SharedPreferences
+import java.util.concurrent.TimeUnit
 
 object AppPrefs {
+    const val AUTHORIZED_ADMIN_EMAIL = "aalamdiwan555@gmail.com"
     private lateinit var prefs: SharedPreferences
     private const val NAME = "autopilot_prefs"
 
@@ -42,6 +44,39 @@ object AppPrefs {
     var subscriptionExpiry: Long
         get() = prefs.getLong("subscription_expiry", 0)
         set(value) = prefs.edit().putLong("subscription_expiry", value).apply()
+
+    var rewardPoints: Int
+        get() = prefs.getInt("reward_points", 0)
+        set(value) = prefs.edit().putInt("reward_points", value.coerceAtLeast(0)).apply()
+
+    var lastDailyRewardAt: Long
+        get() = prefs.getLong("last_daily_reward_at", 0)
+        set(value) = prefs.edit().putLong("last_daily_reward_at", value).apply()
+
+    fun isAuthorizedAdmin(): Boolean {
+        return isLoggedIn && userEmail?.trim()?.equals(AUTHORIZED_ADMIN_EMAIL, ignoreCase = true) == true
+    }
+
+    fun addRewardPoints(points: Int) {
+        if (points > 0) rewardPoints = rewardPoints + points
+    }
+
+    fun claimDailyReward(): Boolean {
+        val now = System.currentTimeMillis()
+        val day = TimeUnit.DAYS.toMillis(1)
+        if (now - lastDailyRewardAt < day) return false
+        addRewardPoints(25)
+        lastDailyRewardAt = now
+        return true
+    }
+
+    fun redeemRewardForSubscription(): Boolean {
+        if (rewardPoints < 100) return false
+        rewardPoints -= 100
+        val now = System.currentTimeMillis()
+        subscriptionExpiry = maxOf(subscriptionExpiry, now) + TimeUnit.DAYS.toMillis(1)
+        return true
+    }
 
     fun hasActiveSubscription(): Boolean {
         return System.currentTimeMillis() < subscriptionExpiry
