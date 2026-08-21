@@ -32,7 +32,13 @@ jobs:
           unzip -q /tmp/gradle.zip -d /tmp
 
       - name: Build debug APK
-        run: /tmp/gradle-${GRADLE_VERSION}/bin/gradle assembleDebug --no-daemon --stacktrace
+        run: |
+          for attempt in 1 2 3; do
+            /tmp/gradle-${GRADLE_VERSION}/bin/gradle assembleDebug --no-daemon --stacktrace && exit 0
+            echo "Gradle attempt ${attempt} failed; retrying dependency resolution..."
+            sleep 20
+          done
+          exit 1
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
