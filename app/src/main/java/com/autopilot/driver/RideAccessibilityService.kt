@@ -197,11 +197,11 @@ class RideAccessibilityService : AccessibilityService() {
         for (character in this@normalizeDigits) {
             append(
                 when (character) {
-                    in '\u0966'..'\u096F' -> character - '\u0966' + '0'.code
-                    in '\u0660'..'\u0669' -> character - '\u0660' + '0'.code
-                    in '\u06F0'..'\u06F9' -> character - '\u06F0' + '0'.code
+                    in '\u0966'..'\u096F' -> (character.code - '\u0966'.code + '0'.code).toChar()
+                    in '\u0660'..'\u0669' -> (character.code - '\u0660'.code + '0'.code).toChar()
+                    in '\u06F0'..'\u06F9' -> (character.code - '\u06F0'.code + '0'.code).toChar()
                     else -> character
-                }.toChar()
+                }
             )
         }
     }
