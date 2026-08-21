@@ -27,8 +27,7 @@ class RideAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        if (!BotState.isRunning) return
-        if (!AppPrefs.hasActiveSubscription() && !AppPrefs.isLoggedIn) return
+        if (!BotState.isRunning || !AppPrefs.isLoggedIn || !AppPrefs.hasActiveSubscription()) return
 
         val rootNode = rootInActiveWindow ?: return
         serviceScope.launch(Dispatchers.Default) {
