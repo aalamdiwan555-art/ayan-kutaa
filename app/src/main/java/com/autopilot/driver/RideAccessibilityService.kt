@@ -132,7 +132,7 @@ class RideAccessibilityService : AccessibilityService() {
                 (buttonBounds.centerX() - bounds.centerX()).toDouble(),
                 (buttonBounds.centerY() - bounds.centerY()).toDouble()
             )
-            if (distance <= PRICE_PROXIMITY_PX) {
+            if (node !== button && distance <= PRICE_PROXIMITY_PX) {
                 parsePrice(node.nodeText())?.let { value ->
                     if (bestPrice == null || distance < bestPrice!!.second) {
                         bestPrice = value to distance
@@ -152,7 +152,7 @@ class RideAccessibilityService : AccessibilityService() {
 
     private fun parseNumericValue(raw: String): Double? {
         val compact = raw.replace(",", "").replace(" ", "")
-        return if (compact.count { it == '.' } > 1) {
+        return if (compact.count { it == '.' } > 1 && compact.length >= 7) {
             compact.replace(".", "").toDoubleOrNull()
         } else {
             compact.toDoubleOrNull()
@@ -212,7 +212,6 @@ class RideAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        stopBotState()
         scanInProgress.set(false)
     }
 
@@ -230,8 +229,7 @@ class RideAccessibilityService : AccessibilityService() {
         val TARGET_PACKAGES = setOf(
             "com.ubercab.driver",
             "com.olacabs.provider",
-            "com.didi.global.passenger",
-            "in.amazon.mShop.android.shopping"
+            "com.didi.global.passenger"
         )
     }
 }

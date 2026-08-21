@@ -4,6 +4,7 @@
         <item name="colorPrimaryVariant">@color/secondary</item>
         <item name="colorOnPrimary">@android:color/white</item>
         <item name="android:statusBarColor">@color/primary</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
     <style name="Theme.Autopilot.NoActionBar" parent="Theme.MaterialComponents.DayNight.NoActionBar">
@@ -11,5 +12,6 @@
         <item name="colorPrimaryVariant">@color/secondary</item>
         <item name="colorOnPrimary">@android:color/white</item>
         <item name="android:statusBarColor">@color/primary</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

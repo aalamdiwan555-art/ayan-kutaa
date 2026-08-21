@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">Autopilot</string>
     <string name="accessibility_service_description">Autopilot ride acceptance service</string>
+    <string name="claim_reward_description">Claim daily reward</string>
+    <string name="redeem_reward_description">Redeem reward points</string>
+    <string name="toggle_bot_description">Start or stop automatic ride acceptance</string>
 </resources>

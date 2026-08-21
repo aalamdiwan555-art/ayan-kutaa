@@ -2,6 +2,7 @@ package com.autopilot.driver
 
 import android.os.Bundle
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.autopilot.driver.databinding.ActivityAdminBinding
 import java.util.concurrent.TimeUnit
@@ -12,14 +13,13 @@ class AdminActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        binding = ActivityAdminBinding.inflate(layoutInflater)
+        setContentView(binding.root)
         if (!AppPrefs.isAuthorizedAdmin()) {
             Toast.makeText(this, "Admin access denied", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
-
-        binding = ActivityAdminBinding.inflate(layoutInflater)
-        setContentView(binding.root)
 
         binding.btnAddSubscription.setOnClickListener {
             val days = binding.etDays.text.toString().toIntOrNull() ?: 0
@@ -34,8 +34,15 @@ class AdminActivity : AppCompatActivity() {
         }
 
         binding.btnResetSubscription.setOnClickListener {
-            AppPrefs.subscriptionExpiry = 0
-            Toast.makeText(this, "Subscription reset", Toast.LENGTH_SHORT).show()
+            AlertDialog.Builder(this)
+                .setTitle("Reset subscription?")
+                .setMessage("This will remove all active subscription time.")
+                .setPositiveButton("Reset") { _, _ ->
+                    AppPrefs.subscriptionExpiry = 0
+                    Toast.makeText(this, "Subscription reset", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
 
         binding.btnBack.setOnClickListener {

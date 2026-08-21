@@ -49,15 +49,15 @@ object AppPrefs {
         }
 
     var minPrice: Double
-        get() = prefs.getFloat("min_price", 0f).toDouble()
+        get() = prefs.getLong("min_price_cents", 0L) / 100.0
         set(value) {
-            prefs.edit().putFloat("min_price", value.toFloat()).commit()
+            prefs.edit().putLong("min_price_cents", (value.coerceAtLeast(0.0) * 100).toLong()).apply()
         }
 
     var maxPrice: Double
-        get() = prefs.getFloat("max_price", 99999f).toDouble()
+        get() = prefs.getLong("max_price_cents", 9_999_900L) / 100.0
         set(value) {
-            prefs.edit().putFloat("max_price", value.toFloat()).commit()
+            prefs.edit().putLong("max_price_cents", (value.coerceAtLeast(0.0) * 100).toLong()).apply()
         }
 
     var isBotRunning: Boolean

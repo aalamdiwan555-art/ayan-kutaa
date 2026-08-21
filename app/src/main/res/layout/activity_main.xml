@@ -3,6 +3,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fillViewport="true"
+    android:scrollbars="vertical"
+    android:fadeScrollbars="false"
     android:background="@drawable/bg_screen">
 
     <LinearLayout
@@ -61,6 +63,7 @@
                     android:text="Daily +25"
                     android:textAllCaps="false"
                     android:textColor="@android:color/white"
+                     android:contentDescription="@string/claim_reward_description"
                     android:background="@drawable/bg_button_primary"
                     android:layout_marginEnd="8dp" />
 
@@ -71,6 +74,8 @@
                     android:layout_weight="1"
                     android:text="Redeem 100"
                     android:textAllCaps="false"
+                     android:textColor="@android:color/white"
+                     android:contentDescription="@string/redeem_reward_description"
                     android:background="@drawable/bg_button_secondary" />
             </LinearLayout>
         </LinearLayout>
@@ -104,6 +109,9 @@
                     android:layout_height="48dp"
                     android:layout_weight="1"
                     android:hint="Min Rs"
+                     android:maxLength="7"
+                     android:digits="0123456789."
+                     android:autofillHints="creditCardNumber"
                     android:inputType="numberDecimal"
                     android:gravity="center"
                     android:background="@drawable/bg_input"
@@ -115,6 +123,9 @@
                     android:layout_height="48dp"
                     android:layout_weight="1"
                     android:hint="Max Rs"
+                     android:maxLength="7"
+                     android:digits="0123456789."
+                     android:autofillHints="creditCardNumber"
                     android:inputType="numberDecimal"
                     android:gravity="center"
                     android:background="@drawable/bg_input" />
@@ -148,7 +159,11 @@
                 android:textColor="@android:color/white"
                 android:textAllCaps="false"
                 android:textSize="18sp"
-                android:background="@drawable/bg_button_primary" />
+                 android:background="@drawable/bg_button_primary"
+                 android:foreground="?attr/selectableItemBackground"
+                 android:clickable="true"
+                 android:focusable="true"
+                 android:contentDescription="@string/toggle_bot_description" />
         </LinearLayout>
 
         <androidx.appcompat.widget.AppCompatButton

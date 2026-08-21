@@ -9,8 +9,6 @@ permissions:
   contents: read
 
 env:
-  GRADLE_VERSION: '8.2'
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,21 +22,20 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Gradle
-        run: |
-          curl --fail --location --retry 3 \
-            "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
-            --output /tmp/gradle.zip
-          unzip -q /tmp/gradle.zip -d /tmp
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Set up Gradle and cache dependencies
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.2'
 
       - name: Build debug APK
         run: |
-          for attempt in 1 2 3; do
-            /tmp/gradle-${GRADLE_VERSION}/bin/gradle assembleDebug --no-daemon --stacktrace && exit 0
-            echo "Gradle attempt ${attempt} failed; retrying dependency resolution..."
-            sleep 20
-          done
-          exit 1
+          gradle assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
