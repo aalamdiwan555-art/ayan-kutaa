@@ -7,7 +7,9 @@ import android.content.Intent
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            // Accessibility service auto-restarts via system if enabled
+            AppPrefs.init(context.applicationContext)
+            BotState.isRunning = false
+            AppPrefs.isBotRunning = false
         }
     }
 }

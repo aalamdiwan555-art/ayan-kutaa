@@ -3,8 +3,8 @@ package com.autopilot.driver
 object OcrKeywords {
     val ACCEPT_KEYWORDS = listOf(
         // English
-        "accept", "Accept", "Accept Ride", "Accept Now", "New Ride", "ACCEPT", "Tap to Accept",
-        "Accept Trip", "Confirm", "CONFIRM", "Take Ride", "Pick Up",
+        "accept", "accept ride", "accept now", "new ride", "tap to accept",
+        "accept trip", "confirm", "take ride", "earn", "earnings", "you will earn", "estimated fare",
 
         // Hindi
         "स्वीकार करें", "स्वीकार करे", "स्वीकार", "राइड स्वीकार करें", "नई राइड", "स्वीकारें",
@@ -36,11 +36,8 @@ object OcrKeywords {
     )
 
     val PRICE_PATTERNS = listOf(
-        Regex("""[₹Rs.\s]*([0-9,]+(?:\.[0-9]{1,2})?)"""),
-        Regex("""([0-9,]+)\s*₹"""),
-        Regex("""fare\s*:?\s*([0-9,]+)""", RegexOption.IGNORE_CASE),
-        Regex("""price\s*:?\s*([0-9,]+)""", RegexOption.IGNORE_CASE),
-        Regex("""amount\s*:?\s*([0-9,]+)""", RegexOption.IGNORE_CASE),
-        Regex("""₹\s*([0-9,]+)""")
+        Regex("""(?:₹|Rs\.?|INR)\s*([0-9,. ]+)""", RegexOption.IGNORE_CASE),
+        Regex("""([0-9,. ]+)\s*(?:₹|Rs\.?|INR)""", RegexOption.IGNORE_CASE),
+        Regex("""(?:fare|price|amount|earnings?|estimated fare)\s*:?\s*(?:₹|Rs\.?|INR)?\s*([0-9,. ]+)""", RegexOption.IGNORE_CASE)
     )
 }

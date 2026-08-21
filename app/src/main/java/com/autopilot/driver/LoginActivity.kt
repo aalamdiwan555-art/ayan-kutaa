@@ -22,15 +22,16 @@ class LoginActivity : AppCompatActivity() {
                 Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                Toast.makeText(this, "Invalid email format", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (password.length < 6) {
+                Toast.makeText(this, "Password must be at least 6 characters", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
 
-            // TODO: Replace with your API call
-            AppPrefs.isLoggedIn = true
-            AppPrefs.userEmail = email
-            AppPrefs.authToken = "token_${System.currentTimeMillis()}"
-
-            Toast.makeText(this, "Login successful", Toast.LENGTH_SHORT).show()
-            startActivity(Intent(this, MainActivity::class.java))
-            finish()
+            Toast.makeText(this, "Authentication service is not configured yet.", Toast.LENGTH_LONG).show()
         }
 
         binding.tvSignup.setOnClickListener {

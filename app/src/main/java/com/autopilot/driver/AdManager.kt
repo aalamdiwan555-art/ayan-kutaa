@@ -7,11 +7,11 @@ import com.startapp.sdk.adsbase.StartAppSDK
 
 object AdManager {
     fun init(app: Application) {
-        StartAppSDK.init(app, "207133232", true)
+        StartAppSDK.init(app, BuildConfig.STARTAPP_ID, true)
         StartAppSDK.setTestAdsEnabled(false)
     }
 
     fun showInterstitial(activity: Activity) {
-        StartAppAd.showAd(activity)
+        if (AppPrefs.isAdConsentGranted) StartAppAd.showAd(activity)
     }
 }

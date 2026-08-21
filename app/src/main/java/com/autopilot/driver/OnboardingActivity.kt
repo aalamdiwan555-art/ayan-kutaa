@@ -63,10 +63,19 @@ class OnboardingActivity : AppCompatActivity() {
         )
 
         binding.btnContinue.isEnabled = accessibilityEnabled && overlayEnabled
+        if (AppPrefs.isOnboardingComplete && accessibilityEnabled && overlayEnabled) {
+            navigateToLogin()
+        }
     }
 
     private fun isAccessibilityEnabled(): Boolean {
         val enabledServices = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
-        return enabledServices.contains(packageName)
+        val expected = "$packageName/.RideAccessibilityService"
+        return enabledServices.split(":").any { it.trim() == expected }
+    }
+
+    private fun navigateToLogin() {
+        startActivity(Intent(this, LoginActivity::class.java))
+        finish()
     }
 }

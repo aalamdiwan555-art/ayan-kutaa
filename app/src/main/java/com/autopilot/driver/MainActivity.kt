@@ -1,10 +1,13 @@
 package com.autopilot.driver
 
 import android.content.Intent
+import android.content.Context
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
 import android.widget.Toast
+import android.view.accessibility.AccessibilityManager
+import android.accessibilityservice.AccessibilityServiceInfo
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.autopilot.driver.databinding.ActivityMainBinding
@@ -18,12 +21,13 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        AdManager.showInterstitial(this)
-
         if (!AppPrefs.isLoggedIn) {
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
             return
+        }
+        if (savedInstanceState == null) {
+            BotState.isRunning = AppPrefs.isBotRunning && AppPrefs.hasActiveSubscription()
         }
 
         binding.etMinPrice.setText(AppPrefs.minPrice.toString())
@@ -96,8 +100,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startBot() {
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Overlay permission required", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+            return
+        }
         if (!AppPrefs.hasActiveSubscription()) {
             Toast.makeText(this, "Subscription expired. Contact admin.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!isAccessibilityServiceAvailable()) {
+            Toast.makeText(this, "Accessibility service is unavailable. Please enable it again.", Toast.LENGTH_LONG).show()
             return
         }
         BotState.isRunning = true
@@ -129,7 +142,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateSubscriptionUI() {
         val hasSub = AppPrefs.hasActiveSubscription()
-        val sdf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+        val sdf = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH)
         val expiry = sdf.format(Date(AppPrefs.subscriptionExpiry))
         binding.tvSubscription.text = if (hasSub) "Active until $expiry" else "No active subscription"
         binding.tvSubscription.setTextColor(
@@ -143,7 +156,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun isAccessibilityEnabled(): Boolean {
-        val enabledServices = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
-        return enabledServices.contains(packageName)
+        val enabledServices = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        val expected = "$packageName/.RideAccessibilityService"
+        return enabledServices.split(":").any { it.trim() == expected }
+    }
+
+    private fun isAccessibilityServiceAvailable(): Boolean {
+        val manager = getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        return manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_GENERIC)
+            .any { it.resolveInfo.serviceInfo.packageName == packageName &&
+                it.resolveInfo.serviceInfo.name == "$packageName.RideAccessibilityService" }
     }
 }

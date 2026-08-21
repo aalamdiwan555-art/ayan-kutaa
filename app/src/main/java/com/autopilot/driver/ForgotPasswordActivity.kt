@@ -19,8 +19,11 @@ class ForgotPasswordActivity : AppCompatActivity() {
                 Toast.makeText(this, "Enter your email", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            Toast.makeText(this, "Reset link sent to $email", Toast.LENGTH_SHORT).show()
-            finish()
+            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                Toast.makeText(this, "Invalid email format", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            Toast.makeText(this, "Password reset service is not configured yet.", Toast.LENGTH_LONG).show()
         }
 
         binding.tvBack.setOnClickListener {

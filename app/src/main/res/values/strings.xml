@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Autopilot</string>
+    <string name="accessibility_service_description">Autopilot ride acceptance service</string>
 </resources>

@@ -42,4 +42,12 @@ class AdminActivity : AppCompatActivity() {
             finish()
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        if (!AppPrefs.isAuthorizedAdmin()) {
+            Toast.makeText(this, "Admin access revoked", Toast.LENGTH_SHORT).show()
+            finish()
+        }
+    }
 }
