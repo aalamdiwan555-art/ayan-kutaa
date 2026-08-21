@@ -2,6 +2,7 @@ package com.autopilot.driver
 
 import android.app.Activity
 import android.app.Application
+import com.startapp.sdk.adsbase.StartAppAd
 import com.startapp.sdk.adsbase.StartAppSDK
 
 object AdManager {
@@ -11,6 +12,6 @@ object AdManager {
     }
 
     fun showInterstitial(activity: Activity) {
-        StartAppSDK.showAd(activity)
+        StartAppAd.showAd(activity)
     }
 }
