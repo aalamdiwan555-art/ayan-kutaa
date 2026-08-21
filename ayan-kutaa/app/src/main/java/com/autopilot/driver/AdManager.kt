@@ -2,20 +2,40 @@ package com.autopilot.driver
 
 import android.app.Activity
 import android.app.Application
-import com.startapp.sdk.adsbase.StartAppAd
-import com.startapp.sdk.adsbase.StartAppSDK
+import com.unity3d.ads.IUnityAdsInitializationListener
+import com.unity3d.ads.IUnityAdsShowListener
+import com.unity3d.ads.UnityAds
+import com.unity3d.ads.UnityAdsInitializationError
+import com.unity3d.ads.UnityAdsShowCompletionState
+import com.unity3d.ads.UnityAdsShowError
 import java.util.concurrent.TimeUnit
 
 object AdManager {
     private const val MIN_INTERVAL_MS = 5 * 60 * 1000L
     private const val MAX_PER_DAY = 3
     private var initialized = false
+    private var ready = false
 
     fun init(app: Application) {
         if (initialized) return
-        StartAppSDK.init(app, BuildConfig.STARTAPP_ID, true)
-        StartAppSDK.setTestAdsEnabled(false)
         initialized = true
+        UnityAds.initialize(
+            app,
+            BuildConfig.UNITY_GAME_ID,
+            false,
+            object : IUnityAdsInitializationListener {
+                override fun onInitializationComplete() {
+                    ready = true
+                }
+
+                override fun onInitializationFailed(
+                    error: UnityAdsInitializationError?,
+                    message: String?
+                ) {
+                    ready = false
+                }
+            }
+        )
     }
 
     /**
@@ -23,7 +43,7 @@ object AdManager {
      * a five-minute cooldown, and a three-impression daily cap.
      */
     fun showAfterUserAction(activity: Activity) {
-        if (!initialized || !AppPrefs.isAdConsentGranted || activity.isFinishing) return
+        if (!initialized || !ready || !AppPrefs.isAdConsentGranted || activity.isFinishing) return
         val now = System.currentTimeMillis()
         if (now - AppPrefs.lastInterstitialAt < MIN_INTERVAL_MS) return
 
@@ -34,10 +54,25 @@ object AdManager {
         }
         if (AppPrefs.interstitialsToday >= MAX_PER_DAY) return
 
-        runCatching {
-            StartAppAd.showAd(activity)
-            AppPrefs.lastInterstitialAt = now
-            AppPrefs.interstitialsToday += 1
+        if (!UnityAds.isReady(BuildConfig.UNITY_INTERSTITIAL_AD_UNIT)) return
+        UnityAds.show(activity, BuildConfig.UNITY_INTERSTITIAL_AD_UNIT, object : IUnityAdsShowListener {
+            override fun onUnityAdsShowFailure(
+                placementId: String?,
+                error: UnityAdsShowError?,
+                message: String?
+            ) = Unit
+
+            override fun onUnityAdsShowStart(placementId: String?) {
+                AppPrefs.lastInterstitialAt = now
+                AppPrefs.interstitialsToday += 1
+            }
+
+            override fun onUnityAdsShowClick(placementId: String?) = Unit
+
+            override fun onUnityAdsShowComplete(
+                placementId: String?,
+                state: UnityAdsShowCompletionState?
+            ) = Unit
         }
     }
 }

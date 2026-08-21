@@ -8,7 +8,7 @@ Auto-detects Accept buttons across all Indian languages and auto-clicks them bas
 - Auto-accept with Min/Max price filter
 - 10 Indian language support for Accept buttons
 - Onboarding with permission checks
-- Start.io ads integration
+- Unity Ads integration with consent, cooldown, and daily frequency limits
 
 ## Build
 ```bash

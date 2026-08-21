@@ -13,8 +13,8 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-        // Keep the advertising identifier in build configuration, not application code.
-        buildConfigField("String", "STARTAPP_ID", "\"207133232\"")
+        buildConfigField("String", "UNITY_GAME_ID", "\"6178982\"")
+        buildConfigField("String", "UNITY_INTERSTITIAL_AD_UNIT", "\"Interstitial_Android\"")
         buildConfigField(
             "String",
             "API_BASE_URL",
@@ -53,7 +53,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
-    implementation("com.startapp:inapp-sdk:4.11.0")
+    implementation("com.unity3d.ads:unity-ads:4.12.0")
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
